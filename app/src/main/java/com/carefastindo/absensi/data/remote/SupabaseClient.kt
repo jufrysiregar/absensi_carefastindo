@@ -1,9 +1,9 @@
 package com.carefastindo.absensi.data.remote
 
-import io.github.jan.tennert.supabase.createSupabaseClient
-import io.github.jan.tennert.supabase.auth.Auth
-import io.github.jan.tennert.supabase.postgrest.Postgrest
-import io.github.jan.tennert.supabase.storage.Storage
+import io.github.jan.supabase.createSupabaseClient
+import io.github.jan.supabase.auth.Auth
+import io.github.jan.supabase.postgrest.Postgrest
+import io.github.jan.supabase.storage.Storage
 
 object SupabaseClient {
     private const val SUPABASE_URL = "https://rbhloslxavnlhnruzewo.supabase.co"

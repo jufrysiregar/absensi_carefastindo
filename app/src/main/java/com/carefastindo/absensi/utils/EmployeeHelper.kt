@@ -2,7 +2,7 @@ package com.carefastindo.absensi.utils
 
 import com.carefastindo.absensi.data.model.User
 import com.carefastindo.absensi.data.remote.SupabaseClient
-import io.github.jan.tennert.supabase.postgrest.from
+import io.github.jan.supabase.postgrest.from
 
 object EmployeeHelper {
 
