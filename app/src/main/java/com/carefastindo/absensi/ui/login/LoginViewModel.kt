@@ -96,7 +96,7 @@ class LoginViewModel : ViewModel() {
             try {
                 // Update counter and reset date in database
                 SupabaseClient.db.from("users").update({
-                    set("lateness_count", 0)
+                    set("lateness_count", 0 as Int)
                     set("lateness_reset_date", todayStr)
                 }) {
                     filter {
