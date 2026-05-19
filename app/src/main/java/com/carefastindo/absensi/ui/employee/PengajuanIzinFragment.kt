@@ -306,11 +306,11 @@ class PengajuanIzinFragment : Fragment() {
         RecyclerView.Adapter<LeaveHistoryAdapter.ViewHolder>() {
 
         inner class ViewHolder(view: View) : RecyclerView.ViewHolder(view) {
-            val txtDateRange: TextView = view.findViewById(R.id.txtDateRange)
+            val txtDateRange: TextView = view.findViewById(R.id.txtLeaveDates)
             val txtLeaveType: TextView = view.findViewById(R.id.txtLeaveType)
-            val cardLeaveType: CardView = view.findViewById(R.id.cardLeaveType)
-            val txtReason: TextView = view.findViewById(R.id.txtReason)
-            val txtStatus: TextView = view.findViewById(R.id.txtStatus)
+            val cardLeaveType: CardView = view.findViewById(R.id.cardType)
+            val txtReason: TextView = view.findViewById(R.id.txtLeaveReason)
+            val txtStatus: TextView = view.findViewById(R.id.txtLeaveStatus)
             val cardStatus: CardView = view.findViewById(R.id.cardStatus)
         }
 
