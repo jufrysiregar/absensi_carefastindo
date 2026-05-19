@@ -72,6 +72,21 @@ class LoginViewModel : ViewModel() {
         }
     }
 
+    fun resetPassword(email: String, onSuccess: () -> Unit, onError: (String) -> Unit) {
+        if (email.isBlank()) {
+            onError("Email tidak boleh kosong")
+            return
+        }
+        viewModelScope.launch {
+            try {
+                SupabaseClient.auth.resetPasswordForEmail(email = email)
+                onSuccess()
+            } catch (e: Exception) {
+                onError(e.localizedMessage ?: "Gagal mengirim email reset password")
+            }
+        }
+    }
+
     private suspend fun handleMonthlyLatenessReset(user: User) {
         val sdf = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault())
         val todayStr = sdf.format(Date())

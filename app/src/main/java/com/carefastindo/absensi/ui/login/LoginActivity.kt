@@ -35,6 +35,65 @@ class LoginActivity : AppCompatActivity() {
             val password = binding.edtPassword.text.toString().trim()
             viewModel.login(email, password)
         }
+
+        binding.btnForgotPassword.setOnClickListener {
+            val currentEmail = binding.edtEmail.text.toString().trim()
+            showForgotPasswordDialog(currentEmail)
+        }
+    }
+
+    private fun showForgotPasswordDialog(initialEmail: String) {
+        val input = android.widget.EditText(this).apply {
+            inputType = android.text.InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS or android.text.InputType.TYPE_CLASS_TEXT
+            setText(initialEmail)
+            hint = "contoh: nama@carefastindo.com"
+        }
+
+        val container = android.widget.FrameLayout(this).apply {
+            addView(input, android.widget.FrameLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.MATCH_PARENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT
+            ).apply {
+                leftMargin = 64
+                rightMargin = 64
+                topMargin = 16
+                bottomMargin = 16
+            })
+        }
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Reset Kata Sandi")
+            .setMessage("Masukkan email terdaftar Anda. Kami akan mengirimkan tautan untuk mengatur ulang kata sandi Anda.")
+            .setView(container)
+            .setPositiveButton("Kirim") { dialog, _ ->
+                val email = input.text.toString().trim()
+                if (email.isEmpty()) {
+                    Toast.makeText(this, "Email tidak boleh kosong", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                
+                val loadingToast = Toast.makeText(this, "Mengirim tautan reset...", Toast.LENGTH_LONG)
+                loadingToast.show()
+                
+                viewModel.resetPassword(email, onSuccess = {
+                    loadingToast.cancel()
+                    MaterialAlertDialogBuilder(this@LoginActivity)
+                        .setTitle("Tautan Terkirim")
+                        .setMessage("Tautan reset kata sandi telah sukses dikirim ke email: $email\n\nSilakan cek folder Kotak Masuk atau Spam email Anda.")
+                        .setPositiveButton("OK") { d, _ -> d.dismiss() }
+                        .show()
+                }, onError = { errorMsg ->
+                    loadingToast.cancel()
+                    MaterialAlertDialogBuilder(this@LoginActivity)
+                        .setTitle("Gagal")
+                        .setMessage(errorMsg)
+                        .setPositiveButton("OK") { d, _ -> d.dismiss() }
+                        .show()
+                })
+                dialog.dismiss()
+            }
+            .setNegativeButton("Batal") { dialog, _ -> dialog.dismiss() }
+            .show()
     }
 
     private fun observeViewModel() {

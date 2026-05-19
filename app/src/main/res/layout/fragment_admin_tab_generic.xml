@@ -10,7 +10,7 @@
         android:id="@+id/imgIcon"
         android:layout_width="80dp"
         android:layout_height="80dp"
-        android:src="@drawable/logo_utama"
+        android:src="@drawable/logo1"
         android:alpha="0.3" />
 
     <TextView
