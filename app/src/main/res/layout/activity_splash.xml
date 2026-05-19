@@ -4,7 +4,7 @@
     xmlns:tools="http://tools.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/primary"
+    android:background="@drawable/loading_bg"
     tools:context=".SplashActivity">
 
     <!-- Glowing luxury background decoration -->
@@ -12,8 +12,8 @@
         android:id="@+id/glowBackground"
         android:layout_width="300dp"
         android:layout_height="300dp"
-        android:background="@drawable/ic_logo_carefastindo"
-        android:alpha="0.1"
+        android:background="@drawable/logo_utama"
+        android:alpha="0.15"
         android:scaleX="2"
         android:scaleY="2"
         app:layout_constraintBottom_toBottomOf="parent"
@@ -37,7 +37,7 @@
             android:id="@+id/imgLogo"
             android:layout_width="140dp"
             android:layout_height="140dp"
-            android:src="@drawable/ic_logo_carefastindo"
+            android:src="@drawable/logo_utama"
             android:contentDescription="@string/app_name" />
 
         <TextView
@@ -63,14 +63,12 @@
 
     </LinearLayout>
 
-    <!-- Bottom Indicator -->
+    <!-- Bottom Indicator (Spinning loader) -->
     <ProgressBar
         android:id="@+id/progressBar"
-        style="?android:attr/progressBarStyleHorizontal"
-        android:layout_width="120dp"
-        android:layout_height="wrap_content"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
         android:layout_marginBottom="48dp"
-        android:indeterminate="true"
         android:indeterminateTint="@color/accent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
