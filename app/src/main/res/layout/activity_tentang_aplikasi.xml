@@ -168,11 +168,10 @@
                                 android:layout_height="wrap_content"
                                 android:text="M. Juffri Siregar"
                                 android:textColor="@color/text_primary_light"
-                                android:textStyle="bold"
                                 android:textSize="13sp" />
                         </LinearLayout>
 
-                        <!-- NPM / NIM -->
+                        <!-- NIM -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -181,7 +180,7 @@
                             <TextView
                                 android:layout_width="120dp"
                                 android:layout_height="wrap_content"
-                                android:text="NPM / NIM"
+                                android:text="NIM"
                                 android:textColor="@color/text_secondary_light"
                                 android:textStyle="bold"
                                 android:textSize="13sp" />
@@ -196,35 +195,6 @@
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="1912000103"
-                                android:textColor="@color/text_primary_light"
-                                android:textStyle="bold"
-                                android:textSize="13sp" />
-                        </LinearLayout>
-
-                        <!-- Program Studi -->
-                        <LinearLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="8dp">
-                            <TextView
-                                android:layout_width="120dp"
-                                android:layout_height="wrap_content"
-                                android:text="Program Studi"
-                                android:textColor="@color/text_secondary_light"
-                                android:textStyle="bold"
-                                android:textSize="13sp" />
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text=":"
-                                android:textColor="@color/text_secondary_light"
-                                android:layout_marginEnd="8dp" />
-                            <TextView
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
-                                android:layout_height="wrap_content"
-                                android:text="Informatika"
                                 android:textColor="@color/text_primary_light"
                                 android:textSize="13sp" />
                         </LinearLayout>
@@ -257,7 +227,7 @@
                                 android:textSize="13sp" />
                         </LinearLayout>
 
-                        <!-- Kampus -->
+                        <!-- Program Studi -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -266,7 +236,35 @@
                             <TextView
                                 android:layout_width="120dp"
                                 android:layout_height="wrap_content"
-                                android:text="Kampus"
+                                android:text="Program Studi"
+                                android:textColor="@color/text_secondary_light"
+                                android:textStyle="bold"
+                                android:textSize="13sp" />
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text=":"
+                                android:textColor="@color/text_secondary_light"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="Informatika"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <!-- Universitas -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+                            <TextView
+                                android:layout_width="120dp"
+                                android:layout_height="wrap_content"
+                                android:text="Universitas"
                                 android:textColor="@color/text_secondary_light"
                                 android:textStyle="bold"
                                 android:textSize="13sp" />
@@ -309,7 +307,6 @@
                                 android:layout_height="wrap_content"
                                 android:text="Sarjana Komputer (S. Kom)"
                                 android:textColor="@color/text_primary_light"
-                                android:textStyle="bold"
                                 android:textSize="13sp" />
                         </LinearLayout>
                     </LinearLayout>
@@ -336,7 +333,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
 
-                        <!-- Pembimbing I -->
+                        <!-- Dosen Pembimbing -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -345,7 +342,7 @@
                             <TextView
                                 android:layout_width="120dp"
                                 android:layout_height="wrap_content"
-                                android:text="Pembimbing I"
+                                android:text="Dosen Pembimbing"
                                 android:textColor="@color/text_secondary_light"
                                 android:textStyle="bold"
                                 android:textSize="13sp" />
@@ -364,7 +361,7 @@
                                 android:textSize="13sp" />
                         </LinearLayout>
 
-                        <!-- Penguji I -->
+                        <!-- Dosen Penguji I -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -373,7 +370,7 @@
                             <TextView
                                 android:layout_width="120dp"
                                 android:layout_height="wrap_content"
-                                android:text="Penguji I"
+                                android:text="Dosen Penguji I"
                                 android:textColor="@color/text_secondary_light"
                                 android:textStyle="bold"
                                 android:textSize="13sp" />
@@ -392,7 +389,7 @@
                                 android:textSize="13sp" />
                         </LinearLayout>
 
-                        <!-- Penguji II -->
+                        <!-- Dosen Penguji II -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -400,7 +397,7 @@
                             <TextView
                                 android:layout_width="120dp"
                                 android:layout_height="wrap_content"
-                                android:text="Penguji II"
+                                android:text="Dosen Penguji II"
                                 android:textColor="@color/text_secondary_light"
                                 android:textStyle="bold"
                                 android:textSize="13sp" />
