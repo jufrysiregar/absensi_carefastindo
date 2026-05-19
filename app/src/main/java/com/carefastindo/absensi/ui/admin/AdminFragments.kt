@@ -393,8 +393,8 @@ class TabLeaveRequestsFragment : Fragment() {
         savedInstanceState: Bundle?
     ): View? {
         val view = inflater.inflate(R.layout.fragment_pengajuan_izin, container, false)
-        recyclerViewLeave = view.findViewById(R.id.recyclerViewLeave)
-        txtNoData = view.findViewById(R.id.txtNoData)
+        recyclerViewLeave = view.findViewById(R.id.rvLeaveHistory)
+        txtNoData = view.findViewById(R.id.txtEmptyHistory)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
         recyclerViewLeave.layoutManager = LinearLayoutManager(context)
