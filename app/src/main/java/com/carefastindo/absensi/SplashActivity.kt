@@ -25,10 +25,6 @@ class SplashActivity : AppCompatActivity() {
         binding = ActivitySplashBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        val fadeIn = AnimationUtils.loadAnimation(this, android.R.anim.fade_in)
-        fadeIn.duration = 1000
-        binding.logoContainer.startAnimation(fadeIn)
-
         lifecycleScope.launch {
             delay(2000)
             checkSession()

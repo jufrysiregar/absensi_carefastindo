@@ -7,71 +7,16 @@
     android:background="@drawable/loading_bg"
     tools:context=".SplashActivity">
 
-    <!-- Glowing luxury background decoration -->
-    <View
-        android:id="@+id/glowBackground"
-        android:layout_width="300dp"
-        android:layout_height="300dp"
-        android:background="@drawable/logo_utama"
-        android:alpha="0.15"
-        android:scaleX="2"
-        android:scaleY="2"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Center Logo Container -->
-    <LinearLayout
-        android:id="@+id/logoContainer"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:orientation="vertical"
-        android:gravity="center"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent">
-
-        <ImageView
-            android:id="@+id/imgLogo"
-            android:layout_width="140dp"
-            android:layout_height="140dp"
-            android:src="@drawable/logo_utama"
-            android:contentDescription="@string/app_name" />
-
-        <TextView
-            android:id="@+id/txtAppName"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/app_name"
-            android:textColor="@color/accent"
-            android:textSize="26sp"
-            android:textStyle="bold"
-            android:letterSpacing="0.05" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Premium Enterprise Attendance System"
-            android:textColor="@color/white"
-            android:alpha="0.7"
-            android:textSize="12sp"
-            android:letterSpacing="0.1" />
-
-    </LinearLayout>
-
-    <!-- Bottom Indicator (Spinning loader) -->
+    <!-- Bottom Indicator (Spinning loader positioned dynamically below the pre-drawn center logo) -->
     <ProgressBar
         android:id="@+id/progressBar"
         android:layout_width="56dp"
         android:layout_height="56dp"
-        android:layout_marginBottom="48dp"
         android:indeterminateTint="@color/accent"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_bias="0.68" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>

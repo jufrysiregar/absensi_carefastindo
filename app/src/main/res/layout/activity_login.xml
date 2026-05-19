@@ -45,7 +45,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginEnd="24dp"
-        android:layout_marginTop="-40dp"
+        android:layout_marginTop="24dp"
         app:cardCornerRadius="20dp"
         app:cardElevation="8dp"
         app:cardBackgroundColor="@color/surface_light"
@@ -76,7 +76,8 @@
                 android:hint="@string/hint_email"
                 app:boxStrokeColor="@color/primary"
                 app:hintTextColor="@color/primary"
-                app:startIconDrawable="@android:drawable/ic_dialog_email">
+                app:startIconDrawable="@android:drawable/ic_dialog_email"
+                app:startIconTint="@color/black">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/edtEmail"
@@ -96,8 +97,10 @@
                 android:hint="@string/hint_password"
                 app:boxStrokeColor="@color/primary"
                 app:hintTextColor="@color/primary"
-                app:passwordToggleEnabled="true"
-                app:startIconDrawable="@android:drawable/ic_lock_idle_lock">
+                app:endIconMode="password_toggle"
+                app:endIconTint="@color/black"
+                app:startIconDrawable="@android:drawable/ic_lock_idle_lock"
+                app:startIconTint="@color/black">
 
                 <com.google.android.material.textfield.TextInputEditText
                     android:id="@+id/edtPassword"
@@ -125,14 +128,17 @@
 
     <!-- Bottom decorative label -->
     <TextView
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginBottom="24dp"
-        android:text="Carefastindo Care Center © 2026"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:text="© 2026 Jufry Siregar | Absensi Pegawai PT. Carefastindo Indonesia. All Rights Reserved."
         android:textColor="@color/text_secondary_light"
-        android:textSize="11sp"
-        app:layout_constraintBottom_toBottomOf="parent"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent" />
+        android:textSize="9.5sp"
+        android:maxLines="1"
+        android:ellipsize="end"
+        android:gravity="center"
+        app:layout_constraintBottom_toBottomOf="parent" />
 
 </androidx.constraintlayout.widget.ConstraintLayout>
