@@ -13,9 +13,7 @@ import androidx.recyclerview.widget.LinearLayoutManager
 import com.carefastindo.absensi.R
 import com.carefastindo.absensi.databinding.ActivityEmployeeMainBinding
 import com.carefastindo.absensi.ui.login.LoginActivity
-import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.launch
+import com.carefastindo.absensi.ui.about.TentangAplikasiActivity
 
 class EmployeeMainActivity : AppCompatActivity() {
 
@@ -49,6 +47,9 @@ class EmployeeMainActivity : AppCompatActivity() {
             when (menuItem.itemId) {
                 R.id.nav_leave -> {
                     BottomSheetLeaveRequest().show(supportFragmentManager, "LeaveRequest")
+                }
+                R.id.nav_tentang -> {
+                    startActivity(Intent(this, TentangAplikasiActivity::class.java))
                 }
                 R.id.nav_logout -> {
                     viewModel.logout()

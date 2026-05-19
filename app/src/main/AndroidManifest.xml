@@ -56,6 +56,12 @@
             android:exported="false"
             android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
 
+        <!-- Tentang Aplikasi Screen -->
+        <activity
+            android:name=".ui.about.TentangAplikasiActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
+
     </application>
 
 </manifest>

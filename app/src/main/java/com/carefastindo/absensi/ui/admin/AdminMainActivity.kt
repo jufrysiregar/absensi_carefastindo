@@ -59,6 +59,10 @@ class AdminMainActivity : AppCompatActivity() {
     }
 
     private fun setupListeners() {
+        binding.btnAdminAbout.setOnClickListener {
+            startActivity(Intent(this, com.carefastindo.absensi.ui.about.TentangAplikasiActivity::class.java))
+        }
+
         binding.btnAdminLogout.setOnClickListener {
             CoroutineScope(Dispatchers.IO).launch {
                 try {
