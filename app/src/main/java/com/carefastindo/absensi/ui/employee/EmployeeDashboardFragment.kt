@@ -290,7 +290,7 @@ class EmployeeDashboardFragment : Fragment() {
     private fun startPresensiFlow(type: String) {
         // Step 1: Scan QR Code
         val options = GmsBarcodeScannerOptions.Builder()
-            .setBarcodeFormats(com.google.android.gms.barcode.common.Barcode.FORMAT_QR_CODE)
+            .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
             .build()
         val scanner = GmsBarcodeScanning.getClient(requireContext(), options)
         
