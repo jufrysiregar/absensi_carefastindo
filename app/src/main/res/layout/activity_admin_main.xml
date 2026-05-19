@@ -27,7 +27,7 @@
             <ImageView
                 android:layout_width="32dp"
                 android:layout_height="32dp"
-                android:src="@drawable/logo1" />
+                android:src="@drawable/logo" />
 
             <TextView
                 android:layout_width="0dp"

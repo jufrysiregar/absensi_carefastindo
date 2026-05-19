@@ -16,15 +16,15 @@
         app:layout_constraintTop_toTopOf="parent" />
 
     <ImageView
-        android:id="@+id/loginLogo"
-        android:layout_width="120dp"
-        android:layout_height="120dp"
-        android:layout_marginTop="110dp"
-        android:src="@drawable/logo1"
-        app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent"
-        android:contentDescription="@string/app_name" />
+         android:id="@+id/loginLogo"
+         android:layout_width="120dp"
+         android:layout_height="120dp"
+         android:layout_marginTop="110dp"
+         android:src="@drawable/logo"
+         app:layout_constraintEnd_toEndOf="parent"
+         app:layout_constraintStart_toStartOf="parent"
+         app:layout_constraintTop_toTopOf="parent"
+         android:contentDescription="@string/app_name" />
 
     <!-- Premium Card Container -->
     <androidx.cardview.widget.CardView
