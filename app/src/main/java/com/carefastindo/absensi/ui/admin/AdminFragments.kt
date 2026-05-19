@@ -83,7 +83,7 @@ class TabDashboardFragment : Fragment() {
         txtCountSakit = view.findViewById(R.id.txtCountSakit)
         txtCountOff = view.findViewById(R.id.txtCountOff)
         txtCountLembur = view.findViewById(R.id.txtCountLembur)
-        swipeRefresh = view.findViewById(R.id.swipeRefresh)
+        swipeRefresh = view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.swipeRefresh)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
         // Set Date
@@ -637,7 +637,7 @@ class TabEmployeeCrudFragment : Fragment() {
                         this.password = password
                     }
                 }
-                val userId = response.id ?: throw Exception("Gagal mendapatkan User ID dari Auth")
+                val userId = response?.id ?: throw Exception("Gagal mendapatkan User ID dari Auth")
 
                 // 2. Generate unique 6-digit code
                 val uniqueCode = EmployeeHelper.generateUniqueEmployeeCode()
