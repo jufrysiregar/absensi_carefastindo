@@ -53,7 +53,6 @@ class PengajuanIzinFragment : Fragment() {
     private lateinit var btnSubmitLeave: MaterialButton
     
     private lateinit var rvHistory: RecyclerView
-    private lateinit var swipeRefresh: androidx.swiperefreshlayout.widget.SwipeRefreshLayout
     private lateinit var txtEmptyHistory: TextView
     private lateinit var loadingOverlay: View
 
@@ -82,19 +81,18 @@ class PengajuanIzinFragment : Fragment() {
         rgLeaveType = view.findViewById(R.id.rgLeaveType)
         rbIzin = view.findViewById(R.id.rbIzin)
         rbSakit = view.findViewById(R.id.rbSakit)
-        cardStartDate = view.findViewById(R.id.cardStartDate)
+        cardStartDate = view.findViewById(R.id.btnStartDate)
         txtStartDate = view.findViewById(R.id.txtStartDate)
-        cardEndDate = view.findViewById(R.id.cardEndDate)
+        cardEndDate = view.findViewById(R.id.btnEndDate)
         txtEndDate = view.findViewById(R.id.txtEndDate)
         etReason = view.findViewById(R.id.etReason)
-        uploadSection = view.findViewById(R.id.uploadSection)
-        btnSelectFile = view.findViewById(R.id.btnSelectFile)
-        imgPreview = view.findViewById(R.id.imgPreview)
-        btnSubmitLeave = view.findViewById(R.id.btnSubmitLeave)
+        uploadSection = view.findViewById(R.id.layoutAttachment)
+        btnSelectFile = view.findViewById(R.id.btnChooseAttachment)
+        imgPreview = view.findViewById(R.id.imgAttachmentPreview)
+        btnSubmitLeave = view.findViewById(R.id.btnSubmit)
 
         // Bind list and swipe views
-        rvHistory = view.findViewById(R.id.rvHistory)
-        swipeRefresh = view.findViewById(R.id.swipeRefresh)
+        rvHistory = view.findViewById(R.id.rvLeaveHistory)
         txtEmptyHistory = view.findViewById(R.id.txtEmptyHistory)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
@@ -136,13 +134,6 @@ class PengajuanIzinFragment : Fragment() {
         // Form Submission
         btnSubmitLeave.setOnClickListener {
             submitLeaveRequest()
-        }
-
-        // List swipe to refresh
-        swipeRefresh.setOnRefreshListener {
-            loadLeaveHistory {
-                swipeRefresh.isRefreshing = false
-            }
         }
     }
 
@@ -210,7 +201,9 @@ class PengajuanIzinFragment : Fragment() {
 
                     withContext(Dispatchers.IO) {
                         // Upload physical bytes directly to leave-attachments bucket
-                        SupabaseClient.storage.from("leave-attachments").upload(path, fileBytes, overwrite = true)
+                        SupabaseClient.storage.from("leave-attachments").upload(path, fileBytes) {
+                            upsert = true
+                        }
                     }
 
                     // Retrieve dynamic signed/public url

@@ -295,7 +295,7 @@ class EmployeeDashboardFragment : Fragment() {
         val scanner = GmsBarcodeScanning.getClient(requireContext(), options)
         
         scanner.startScan()
-            .addOnSuccessListener { barcode ->
+            .addOnSuccessListener { barcode: com.google.mlkit.vision.barcode.common.Barcode ->
                 val scannedValue = barcode.rawValue
                 val expectedSecret = companyConfig?.qrSecret ?: "CARE_OFFICE_MAIN"
 
@@ -310,7 +310,7 @@ class EmployeeDashboardFragment : Fragment() {
                         .show()
                 }
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener { e: Exception ->
                 Toast.makeText(requireContext(), "Gagal scan QR: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
     }
@@ -354,7 +354,7 @@ class EmployeeDashboardFragment : Fragment() {
                     Toast.makeText(requireContext(), "Gagal mendapatkan lokasi. Coba lagi.", Toast.LENGTH_LONG).show()
                 }
             }
-            .addOnFailureListener { e ->
+            .addOnFailureListener { e: Exception ->
                 Toast.makeText(requireContext(), "Error lokasi: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
     }
@@ -388,7 +388,7 @@ class EmployeeDashboardFragment : Fragment() {
                     "check_in" -> {
                         // Check exact lateness status
                         val (jamMasuk, _) = ShiftHelper.getShiftTimes(user.role, user.shiftType)
-                        val limitTerlambatMinutes = ShiftHelper.sha256("") // placeholder check
+                        val limitTerlambatMinutes = 30
                         
                         // Parse times to verify limit boundaries
                         val partsMasuk = jamMasuk.split(":")
