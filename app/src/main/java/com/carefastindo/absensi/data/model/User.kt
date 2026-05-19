@@ -14,5 +14,6 @@ data class User(
     @SerialName("is_active") val isActive: Boolean = true,
     @SerialName("lateness_count") val latenessCount: Int = 0,
     @SerialName("lateness_reset_date") val latenessResetDate: String? = null,
-    @SerialName("break_start") val breakStart: String? = null // HH:mm:ss format
+    @SerialName("break_start") val breakStart: String? = null, // HH:mm:ss format
+    @SerialName("employee_code") val employeeCode: String? = null
 )
