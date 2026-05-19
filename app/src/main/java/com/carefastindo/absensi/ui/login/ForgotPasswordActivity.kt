@@ -83,19 +83,27 @@ class ForgotPasswordActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    SupabaseClient.auth.resetPasswordForEmail(email)
+                    // Kirim 6-digit OTP ke email (BUKAN link redirect)
+                    SupabaseClient.auth.signInWith(OTP) {
+                        this.email = email
+                        this.shouldCreateUser = false  // Hanya untuk user yang sudah terdaftar
+                    }
                 }
                 requestedEmail = email
                 
-                // Show Step 2
+                // Tampilkan Step 2 input OTP
                 layoutStep1.visibility = View.GONE
                 layoutStep2.visibility = View.VISIBLE
                 
-                Toast.makeText(this@ForgotPasswordActivity, "Kode OTP berhasil dikirim ke email", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this@ForgotPasswordActivity,
+                    "Kode OTP 6 digit telah dikirim ke $email",
+                    Toast.LENGTH_LONG
+                ).show()
             } catch (e: Exception) {
                 MaterialAlertDialogBuilder(this@ForgotPasswordActivity)
                     .setTitle("Gagal Mengirim Kode")
-                    .setMessage(e.localizedMessage ?: "Terjadi kesalahan yang tidak diketahui.")
+                    .setMessage(e.localizedMessage ?: "Terjadi kesalahan. Pastikan email terdaftar.")
                     .setPositiveButton("OK", null)
                     .show()
             } finally {
@@ -108,10 +116,10 @@ class ForgotPasswordActivity : AppCompatActivity() {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
-                // 1. Verify OTP code to establish an authenticated session temporarily
+                // 1. Verifikasi kode OTP untuk membuat sesi sementara
                 withContext(Dispatchers.IO) {
                     SupabaseClient.auth.verifyEmailOtp(
-                        type = OtpType.Email.RECOVERY,
+                        type = OtpType.Email.EMAIL,
                         email = requestedEmail,
                         token = otpCode
                     )
