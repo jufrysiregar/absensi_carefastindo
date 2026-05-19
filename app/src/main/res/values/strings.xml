@@ -1,0 +1,32 @@
+<resources>
+    <string name="app_name">Carefastindo Absensi</string>
+    <string name="title_login">Masuk Akun</string>
+    <string name="hint_email">Alamat Email</string>
+    <string name="hint_password">Kata Sandi</string>
+    <string name="btn_login">MASUK</string>
+    <string name="error_empty_fields">Email dan kata sandi tidak boleh kosong.</string>
+    <string name="error_invalid_credentials">Kredensial salah atau akun tidak aktif.</string>
+    
+    <!-- Employee Main Workspace -->
+    <string name="workspace_title">Workspace Karyawan</string>
+    <string name="label_check_in">Absen Masuk</string>
+    <string name="label_break">Istirahat</string>
+    <string name="label_check_out">Absen Pulang</string>
+    
+    <!-- Navigation Drawer -->
+    <string name="menu_home">Beranda</string>
+    <string name="menu_leave">Pengajuan Izin</string>
+    <string name="menu_history">Riwayat Absensi</string>
+    <string name="menu_profile">Profil Karyawan</string>
+    <string name="menu_logout">Keluar</string>
+    
+    <!-- Admin Tabs -->
+    <string name="tab_rekap">Rekap Absensi</string>
+    <string name="tab_leave_requests">Pengajuan Izin</string>
+    <string name="tab_employee_crud">Karyawan</string>
+    <string name="tab_off_schedules">Jadwal Off</string>
+    <string name="tab_emergency">Darurat &amp; Lembur</string>
+    <string name="tab_salary_slip">Slip Gaji</string>
+    <string name="tab_settings">Pengaturan</string>
+    <string name="tab_violations">Pelanggaran</string>
+</resources>
