@@ -9,11 +9,11 @@
     tools:context=".ui.employee.EmployeeMainActivity">
 
     <!-- Main Content Area -->
-    <androidx.constraintlayout.widget.ConstraintLayout
+    <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
-        android:fitsSystemWindows="true"
-        android:background="?android:attr/colorBackground">
+        android:orientation="vertical"
+        android:background="@color/bg_light">
 
         <!-- Custom Luxury Toolbar / Header -->
         <androidx.cardview.widget.CardView
@@ -21,8 +21,7 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             app:cardElevation="6dp"
-            app:cardCornerRadius="0dp"
-            app:layout_constraintTop_toTopOf="parent">
+            app:cardCornerRadius="0dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -45,6 +44,7 @@
                         android:tint="@color/text_primary_light" />
 
                     <TextView
+                        android:id="@+id/txtToolbarTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
                         android:layout_toEndOf="@id/btnMenu"
@@ -63,229 +63,16 @@
                         android:src="@drawable/logo"
                         android:scaleType="fitCenter" />
                 </RelativeLayout>
-
-                <!-- Employee Details Row -->
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="horizontal"
-                    android:layout_marginTop="16dp"
-                    android:gravity="center_vertical">
-
-                    <LinearLayout
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:orientation="vertical">
-
-                        <TextView
-                            android:id="@+id/txtEmployeeName"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Karyawan Carefastindo"
-                            android:textColor="@color/primary"
-                            android:textSize="20sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/txtEmployeeRole"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Pegawai - Shift Pagi"
-                            android:textColor="@color/text_secondary_light"
-                            android:textSize="14sp" />
-                    </LinearLayout>
-
-                    <!-- Realtime digital clock -->
-                    <LinearLayout
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:orientation="vertical"
-                        android:gravity="end">
-
-                        <TextView
-                            android:id="@+id/txtLiveTime"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="08:00:00"
-                            android:textColor="@color/text_primary_light"
-                            android:textSize="22sp"
-                            android:textStyle="bold" />
-
-                        <TextView
-                            android:id="@+id/txtLiveDate"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="Selasa, 19 Mei 2026"
-                            android:textColor="@color/text_secondary_light"
-                            android:textSize="11sp" />
-                    </LinearLayout>
-                </LinearLayout>
-
-            </LinearLayout>
-
-        </androidx.cardview.widget.CardView>
-
-        <!-- Dynamic Red Warning Card for Lateness >= 3 (Initially GONE) -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/latenessWarningCard"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_margin="16dp"
-            app:cardCornerRadius="16dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="@color/error"
-            android:visibility="gone"
-            app:layout_constraintTop_toBottomOf="@id/headerCard">
-
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="horizontal"
-                android:padding="16dp"
-                android:gravity="center_vertical">
-
-                <ImageView
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:src="@android:drawable/ic_dialog_alert"
-                    android:tint="@color/white" />
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:layout_marginStart="12dp">
-
-                    <TextView
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="PERINGATAN KETELAMBATAN!"
-                        android:textColor="@color/white"
-                        android:textStyle="bold"
-                        android:textSize="13sp" />
-
-                    <TextView
-                        android:id="@+id/txtLatenessWarningMessage"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Anda telah 3 kali terlambat bulan ini. Segera perbaiki disiplin kerja Anda."
-                        android:textColor="@color/white"
-                        android:textSize="12sp"
-                        android:layout_marginTop="2dp" />
-                </LinearLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 
-        <!-- Core Attendance Actions Panel -->
-        <androidx.cardview.widget.CardView
-            android:id="@+id/actionsCard"
+        <!-- Dynamic Fragment Container -->
+        <FrameLayout
+            android:id="@+id/employeeFragmentContainer"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_margin="16dp"
-            app:cardCornerRadius="20dp"
-            app:cardElevation="4dp"
-            app:cardBackgroundColor="@color/surface_light"
-            app:layout_constraintTop_toBottomOf="@id/latenessWarningCard">
+            android:layout_height="match_parent" />
 
-            <LinearLayout
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:orientation="vertical"
-                android:padding="20dp">
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="PILIH TATA ABSENSI"
-                    android:textColor="@color/text_primary_light"
-                    android:textStyle="bold"
-                    android:textSize="14sp"
-                    android:layout_marginBottom="16dp" />
-
-                <!-- Check In Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCheckIn"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="@string/label_check_in"
-                    android:textColor="@color/white"
-                    android:backgroundTint="@color/primary"
-                    app:icon="@android:drawable/ic_menu_myplaces"
-                    app:cornerRadius="12dp"
-                    android:layout_marginBottom="12dp"
-                    android:textStyle="bold" />
-
-                <!-- Break Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnBreak"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="@string/label_break"
-                    android:textColor="@color/white"
-                    android:backgroundTint="@color/accent"
-                    app:icon="@android:drawable/ic_lock_idle_alarm"
-                    app:cornerRadius="12dp"
-                    android:layout_marginBottom="12dp"
-                    android:textStyle="bold" />
-
-                <!-- Check Out Button -->
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/btnCheckOut"
-                    android:layout_width="match_parent"
-                    android:layout_height="56dp"
-                    android:text="@string/label_check_out"
-                    android:textColor="@color/white"
-                    android:backgroundTint="@color/primary_variant"
-                    app:icon="@android:drawable/ic_menu_send"
-                    app:cornerRadius="12dp"
-                    android:textStyle="bold" />
-
-            </LinearLayout>
-
-        </androidx.cardview.widget.CardView>
-
-        <!-- Recent History Header -->
-        <LinearLayout
-            android:id="@+id/historyHeader"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:layout_marginStart="20dp"
-            android:layout_marginEnd="20dp"
-            android:layout_marginTop="20dp"
-            app:layout_constraintTop_toBottomOf="@id/actionsCard">
-
-            <TextView
-                android:layout_width="0dp"
-                android:layout_height="wrap_content"
-                android:layout_weight="1"
-                android:text="Riwayat Absensi Terbaru"
-                android:textColor="@color/text_primary_light"
-                android:textStyle="bold"
-                android:textSize="15sp" />
-
-            <TextView
-                android:id="@+id/btnViewAllHistory"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Lihat Semua"
-                android:textColor="@color/primary"
-                android:textStyle="bold"
-                android:textSize="13sp" />
-        </LinearLayout>
-
-        <!-- History RecyclerView -->
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/rvHistory"
-            android:layout_width="match_parent"
-            android:layout_height="0dp"
-            android:layout_margin="16dp"
-            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/historyHeader" />
-
-    </androidx.constraintlayout.widget.ConstraintLayout>
+    </LinearLayout>
 
     <!-- Side Navigation Menu (Drawer) -->
     <com.google.android.material.navigation.NavigationView

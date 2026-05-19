@@ -3,26 +3,32 @@ package com.carefastindo.absensi.ui.employee
 import android.content.Intent
 import android.os.Bundle
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
 import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.GravityCompat
+import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
-import androidx.recyclerview.widget.LinearLayoutManager
 import com.carefastindo.absensi.R
+import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.databinding.ActivityEmployeeMainBinding
 import com.carefastindo.absensi.ui.login.LoginActivity
-import com.carefastindo.absensi.ui.about.TentangAplikasiActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class EmployeeMainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityEmployeeMainBinding
     private val viewModel: EmployeeViewModel by viewModels()
-    private val historyAdapter = AttendanceHistoryAdapter()
+
+    private lateinit var headerName: TextView
+    private lateinit var headerEmail: TextView
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -30,9 +36,13 @@ class EmployeeMainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         setupDrawer()
-        setupRecyclerView()
-        setupListeners()
         observeViewModel()
+
+        // Load default fragment
+        if (savedInstanceState == null) {
+            replaceFragment(EmployeeDashboardFragment(), "Dashboard Absensi")
+            binding.navView.setCheckedItem(R.id.nav_home)
+        }
     }
 
     private fun setupDrawer() {
@@ -46,86 +56,82 @@ class EmployeeMainActivity : AppCompatActivity() {
             binding.drawerLayout.openDrawer(GravityCompat.START)
         }
 
+        // Get header views
+        val headerView = binding.navView.getHeaderView(0)
+        headerName = headerView.findViewById(R.id.navHeaderName)
+        headerEmail = headerView.findViewById(R.id.navHeaderEmail)
+
         binding.navView.setNavigationItemSelectedListener { menuItem ->
             when (menuItem.itemId) {
+                R.id.nav_home -> {
+                    replaceFragment(EmployeeDashboardFragment(), "Dashboard Absensi")
+                }
                 R.id.nav_leave -> {
-                    BottomSheetLeaveRequest().show(supportFragmentManager, "LeaveRequest")
+                    replaceFragment(PengajuanIzinFragment(), "Pengajuan Izin/Sakit")
+                }
+                R.id.nav_history -> {
+                    replaceFragment(RiwayatAbsensiFragment(), "Riwayat Absensi")
+                }
+                R.id.nav_profile -> {
+                    replaceFragment(ProfilFragment(), "Profil Pengguna")
                 }
                 R.id.nav_tentang -> {
-                    startActivity(Intent(this, TentangAplikasiActivity::class.java))
+                    replaceFragment(TentangAplikasiFragment(), "Tentang Aplikasi")
                 }
                 R.id.nav_logout -> {
-                    viewModel.logout()
-                    startActivity(Intent(this, LoginActivity::class.java))
-                    finish()
+                    showLogoutConfirmationDialog()
                 }
-                // Handle other menu items
             }
             binding.drawerLayout.closeDrawer(GravityCompat.START)
             true
         }
     }
 
-    private fun setupRecyclerView() {
-        binding.rvHistory.apply {
-            layoutManager = LinearLayoutManager(this@EmployeeMainActivity)
-            adapter = historyAdapter
-        }
-    }
-
-    private fun setupListeners() {
-        binding.btnCheckIn.setOnClickListener {
-            if (binding.btnCheckIn.isEnabled) {
-                // Trigger QR Code Scanner or Location check here
-                Toast.makeText(this, "Membuka Scanner...", Toast.LENGTH_SHORT).show()
-            }
-        }
-        binding.btnBreak.setOnClickListener {
-            if (binding.btnBreak.isEnabled) {
-                Toast.makeText(this, "Istirahat Dimulai", Toast.LENGTH_SHORT).show()
-            }
-        }
-        binding.btnCheckOut.setOnClickListener {
-            if (binding.btnCheckOut.isEnabled) {
-                Toast.makeText(this, "Membuka Scanner Kepulangan...", Toast.LENGTH_SHORT).show()
-            }
-        }
+    private fun replaceFragment(fragment: Fragment, title: String) {
+        binding.txtToolbarTitle.text = title
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.employeeFragmentContainer, fragment)
+            .commit()
     }
 
     private fun observeViewModel() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
-                // Update live clock
-                binding.txtLiveTime.text = state.liveTime
-                binding.txtLiveDate.text = state.liveDate
-
-                // Update user details
                 state.user?.let { user ->
-                    binding.txtEmployeeName.text = user.name
-                    binding.txtEmployeeRole.text = "${user.role} - Shift ${user.shiftType?.capitalize() ?: "Default"}"
+                    headerName.text = user.name
+                    headerEmail.text = user.email
                 }
-
-                // Update warning card
-                binding.latenessWarningCard.visibility = if (state.showLatenessWarning) View.VISIBLE else View.GONE
-
-                // Update buttons state visually
-                binding.btnCheckIn.isEnabled = state.checkInEnabled
-                binding.btnCheckIn.alpha = if (state.checkInEnabled) 1.0f else 0.5f
-
-                binding.btnBreak.isEnabled = state.breakEnabled
-                binding.btnBreak.alpha = if (state.breakEnabled) 1.0f else 0.5f
-
-                binding.btnCheckOut.isEnabled = state.checkOutEnabled
-                binding.btnCheckOut.alpha = if (state.checkOutEnabled) 1.0f else 0.5f
-
-                // Update history
-                historyAdapter.submitList(state.history)
-
                 state.errorMessage?.let { msg ->
                     Toast.makeText(this@EmployeeMainActivity, msg, Toast.LENGTH_SHORT).show()
                 }
             }
         }
+    }
+
+    private fun showLogoutConfirmationDialog() {
+        MaterialAlertDialogBuilder(this)
+            .setTitle("Keluar Aplikasi")
+            .setMessage("Apakah Anda yakin ingin keluar dari akun Anda?")
+            .setPositiveButton("Ya, Keluar") { _, _ ->
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            SupabaseClient.auth.signOut()
+                        }
+                        
+                        // Navigate back to LoginActivity and clear backstack
+                        val intent = Intent(this@EmployeeMainActivity, LoginActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
+                        finish()
+
+                    } catch (e: Exception) {
+                        Toast.makeText(this@EmployeeMainActivity, "Gagal logout: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    }
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
     }
 
     override fun onBackPressed() {

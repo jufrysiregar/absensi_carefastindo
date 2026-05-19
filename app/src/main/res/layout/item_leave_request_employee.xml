@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="4dp"
+    android:layout_marginVertical="6dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="@color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:padding="16dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <!-- Leave Type Tag (IZIN/SAKIT) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardType"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentStart="true"
+                app:cardCornerRadius="6dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/primary">
+
+                <TextView
+                    android:id="@+id/txtLeaveType"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="SAKIT"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- Status Tag (Pending / Approved / Rejected) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardStatus"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_alignParentEnd="true"
+                app:cardCornerRadius="6dp"
+                app:cardElevation="0dp"
+                app:cardBackgroundColor="@color/accent">
+
+                <TextView
+                    android:id="@+id/txtLeaveStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:paddingHorizontal="8dp"
+                    android:paddingVertical="4dp"
+                    android:text="PENDING"
+                    android:textColor="@color/white"
+                    android:textSize="11sp"
+                    android:textStyle="bold" />
+            </androidx.cardview.widget.CardView>
+        </RelativeLayout>
+
+        <TextView
+            android:id="@+id/txtLeaveDates"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Mulai: 2026-05-19 s/d 2026-05-20"
+            android:textColor="@color/text_secondary_light"
+            android:textSize="13sp" />
+
+        <TextView
+            android:id="@+id/txtLeaveReason"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:text="Alasan: Demam tinggi"
+            android:textColor="@color/text_primary_light"
+            android:textSize="14sp" />
+
+        <!-- Attachment ImageView for thumbnail if sakit -->
+        <ImageView
+            android:id="@+id/imgAttachment"
+            android:layout_width="match_parent"
+            android:layout_height="140dp"
+            android:layout_marginTop="10dp"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            android:contentDescription="Bukti Surat Sakit"
+            android:background="#F1F5F9" />
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

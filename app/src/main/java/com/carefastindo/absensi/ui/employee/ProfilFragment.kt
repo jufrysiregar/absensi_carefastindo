@@ -1,0 +1,165 @@
+package com.carefastindo.absensi.ui.employee
+
+import android.content.Intent
+import android.os.Bundle
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import android.widget.Toast
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
+import com.carefastindo.absensi.R
+import com.carefastindo.absensi.data.remote.SupabaseClient
+import com.carefastindo.absensi.ui.login.LoginActivity
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.textfield.TextInputEditText
+import io.github.jan.supabase.auth.auth
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+
+class ProfilFragment : Fragment() {
+
+    private val viewModel: EmployeeViewModel by activityViewModels()
+
+    private lateinit var txtName: TextView
+    private lateinit var txtEmail: TextView
+    private lateinit var txtEmployeeCode: TextView
+    private lateinit var txtRole: TextView
+    private lateinit var txtShift: TextView
+    private lateinit var txtPosition: TextView
+    private lateinit var txtLatenessCount: TextView
+
+    private lateinit var btnChangePassword: MaterialButton
+    private lateinit var btnLogout: MaterialButton
+    private lateinit var loadingOverlay: View
+
+    override fun onCreateView(
+        inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
+    ): View? {
+        val view = inflater.inflate(R.layout.fragment_profil, container, false)
+
+        txtName = view.findViewById(R.id.txtName)
+        txtEmail = view.findViewById(R.id.txtEmail)
+        txtEmployeeCode = view.findViewById(R.id.txtEmployeeCode)
+        txtRole = view.findViewById(R.id.txtRole)
+        txtShift = view.findViewById(R.id.txtShift)
+        txtPosition = view.findViewById(R.id.txtPosition)
+        txtLatenessCount = view.findViewById(R.id.txtLatenessCount)
+
+        btnChangePassword = view.findViewById(R.id.btnChangePassword)
+        btnLogout = view.findViewById(R.id.btnLogout)
+        loadingOverlay = view.findViewById(R.id.loadingOverlay)
+
+        setupListeners()
+        observeUserData()
+
+        return view
+    }
+
+    private fun setupListeners() {
+        btnChangePassword.setOnClickListener {
+            showChangePasswordDialog()
+        }
+
+        btnLogout.setOnClickListener {
+            showLogoutConfirmationDialog()
+        }
+    }
+
+    private fun observeUserData() {
+        lifecycleScope.launch {
+            viewModel.uiState.collectLatest { state ->
+                val u = state.user ?: return@collectLatest
+                txtName.text = u.name
+                txtEmail.text = u.email
+                txtEmployeeCode.text = u.employeeCode ?: "--"
+                txtRole.text = u.role
+                txtShift.text = u.shiftType?.capitalize() ?: "Default"
+                txtPosition.text = u.position
+                txtLatenessCount.text = "${u.latenessCount} Kali"
+            }
+        }
+    }
+
+    private fun showChangePasswordDialog() {
+        val dialogView = LayoutInflater.from(requireContext()).inflate(R.layout.dialog_change_password, null)
+        val edtNewPassword = dialogView.findViewById<TextInputEditText>(R.id.edtNewPassword)
+        val edtConfirmPassword = dialogView.findViewById<TextInputEditText>(R.id.edtConfirmPassword)
+
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Ganti Kata Sandi")
+            .setView(dialogView)
+            .setPositiveButton("Simpan") { dialog, _ ->
+                val newPass = edtNewPassword.text.toString().trim()
+                val confirmPass = edtConfirmPassword.text.toString().trim()
+
+                if (newPass.isEmpty() || confirmPass.isEmpty()) {
+                    Toast.makeText(requireContext(), "Semua kolom sandi harus diisi", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+
+                if (newPass != confirmPass) {
+                    Toast.makeText(requireContext(), "Sandi baru dan konfirmasi tidak cocok", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+
+                if (newPass.length < 6) {
+                    Toast.makeText(requireContext(), "Sandi minimal terdiri dari 6 karakter", Toast.LENGTH_LONG).show()
+                    return@setPositiveButton
+                }
+
+                loadingOverlay.visibility = View.VISIBLE
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            SupabaseClient.auth.updateUser {
+                                password = newPass
+                            }
+                        }
+                        Toast.makeText(requireContext(), "Kata sandi berhasil diperbarui!", Toast.LENGTH_LONG).show()
+                    } catch (e: Exception) {
+                        Toast.makeText(requireContext(), "Gagal mengubah sandi: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        loadingOverlay.visibility = View.GONE
+                    }
+                }
+                dialog.dismiss()
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+
+    private fun showLogoutConfirmationDialog() {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("Keluar Aplikasi")
+            .setMessage("Apakah Anda yakin ingin keluar dari akun Anda?")
+            .setPositiveButton("Ya, Keluar") { _, _ ->
+                loadingOverlay.visibility = View.VISIBLE
+                lifecycleScope.launch {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            SupabaseClient.auth.signOut()
+                        }
+                        
+                        // Navigate back to LoginActivity and clear backstack
+                        val intent = Intent(requireActivity(), LoginActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        startActivity(intent)
+                        requireActivity().finish()
+
+                    } catch (e: Exception) {
+                        Toast.makeText(requireContext(), "Gagal logout: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                    } finally {
+                        loadingOverlay.visibility = View.GONE
+                    }
+                }
+            }
+            .setNegativeButton("Batal", null)
+            .show()
+    }
+}
