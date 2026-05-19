@@ -122,7 +122,7 @@ class TabDashboardFragment : Fragment() {
                 // 3. Off schedules today
                 val offToday = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("off_schedules")
-                        .select { filter { eq("date", today) } }
+                        .select { filter { eq("off_date", today) } }
                         .decodeList<OffSchedule>()
                 }
 
@@ -227,7 +227,7 @@ class TabRekapFragment : Fragment() {
                 // 2. Fetch Off schedules
                 val offList = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("off_schedules")
-                        .select { filter { eq("date", selectedDate) } }
+                        .select { filter { eq("off_date", selectedDate) } }
                         .decodeList<OffSchedule>()
                 }
 
@@ -978,7 +978,7 @@ class TabOffSchedulesFragment : Fragment() {
                         .select {
                             filter {
                                 eq("user_id", userId)
-                                eq("date", dateStr)
+                                eq("off_date", dateStr)
                             }
                         }.decodeList<OffSchedule>()
                 }
@@ -1418,7 +1418,7 @@ class TabSalarySlipFragment : Fragment() {
                             .select {
                                 filter {
                                     eq("user_id", emp.id)
-                                    like("date", "$targetYear-$targetMonth%")
+                                    like("off_date", "$targetYear-$targetMonth%")
                                 }
                             }.decodeList<OffSchedule>()
                     }
