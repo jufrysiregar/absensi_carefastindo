@@ -86,7 +86,6 @@ class ForgotPasswordActivity : AppCompatActivity() {
                     // Kirim 6-digit OTP ke email (BUKAN link redirect)
                     SupabaseClient.auth.signInWith(OTP) {
                         this.email = email
-                        this.shouldCreateUser = false  // Hanya untuk user yang sudah terdaftar
                     }
                 }
                 requestedEmail = email
