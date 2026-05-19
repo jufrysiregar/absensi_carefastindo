@@ -14,6 +14,9 @@ import com.carefastindo.absensi.R
 import com.carefastindo.absensi.databinding.ActivityEmployeeMainBinding
 import com.carefastindo.absensi.ui.login.LoginActivity
 import com.carefastindo.absensi.ui.about.TentangAplikasiActivity
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
 
 class EmployeeMainActivity : AppCompatActivity() {
 
