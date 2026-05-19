@@ -4,8 +4,8 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.carefastindo.absensi.data.model.User
 import com.carefastindo.absensi.data.remote.SupabaseClient
-import io.github.jan-tennert.supabase.gotrue.providers.builtin.Email
-import io.github.jan-tennert.supabase.postgrest.from
+import io.github.jan.tennert.supabase.auth.providers.builtin.Email
+import io.github.jan.tennert.supabase.postgrest.from
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch

@@ -12,7 +12,7 @@ import com.carefastindo.absensi.ui.employee.EmployeeMainActivity
 import com.carefastindo.absensi.ui.admin.AdminMainActivity
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.data.model.User
-import io.github.jan-tennert.supabase.postgrest.from
+import io.github.jan.tennert.supabase.postgrest.from
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 

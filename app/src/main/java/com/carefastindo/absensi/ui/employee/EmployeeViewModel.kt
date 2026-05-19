@@ -6,7 +6,7 @@ import com.carefastindo.absensi.data.model.Attendance
 import com.carefastindo.absensi.data.model.User
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.utils.ShiftHelper
-import io.github.jan-tennert.supabase.postgrest.from
+import io.github.jan.tennert.supabase.postgrest.from
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -74,7 +74,7 @@ class EmployeeViewModel : ViewModel() {
                 val history = SupabaseClient.db.from("attendance")
                     .select { 
                         filter { eq("user_id", userId) }
-                        order("date", io.github.jan-tennert.supabase.postgrest.query.Order.DESCENDING)
+                        order("date", io.github.jan.tennert.supabase.postgrest.query.Order.DESCENDING)
                     }
                     .decodeList<Attendance>()
 
