@@ -19,6 +19,7 @@ open class GenericTabFragment(private val title: String) : Fragment() {
     }
 }
 
+class TabDashboardFragment : GenericTabFragment("Dashboard Ringkasan Hari Ini")
 class TabRekapFragment : GenericTabFragment("Rekap Absensi Hari Ini")
 class TabLeaveRequestsFragment : GenericTabFragment("Daftar Pengajuan Izin/Sakit")
 class TabEmployeeCrudFragment : GenericTabFragment("Manajemen Karyawan")

@@ -6,20 +6,12 @@
     android:orientation="vertical"
     android:background="?android:attr/colorBackground">
 
-    <ImageView
-        android:id="@+id/imgIcon"
-        android:layout_width="80dp"
-        android:layout_height="80dp"
-        android:src="@drawable/logo"
-        android:alpha="0.3" />
-
     <TextView
         android:id="@+id/txtPlaceholder"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginTop="16dp"
-        android:text="Fitur Segera Hadir"
+        android:text="Belum ada data saat ini"
         android:textColor="@color/text_secondary_light"
-        android:textSize="18sp"
+        android:textSize="16sp"
         android:textStyle="bold" />
 </LinearLayout>

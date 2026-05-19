@@ -308,7 +308,7 @@
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="Sarjana Komputer (S. Kom)"
-                                android:textColor="@color/accent"
+                                android:textColor="@color/text_primary_light"
                                 android:textStyle="bold"
                                 android:textSize="13sp" />
                         </LinearLayout>

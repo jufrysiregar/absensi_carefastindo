@@ -2,15 +2,15 @@ package com.carefastindo.absensi.ui.admin
 
 import android.content.Intent
 import android.os.Bundle
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GravityCompat
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.FragmentActivity
-import androidx.viewpager2.adapter.FragmentStateAdapter
 import com.carefastindo.absensi.R
 import com.carefastindo.absensi.databinding.ActivityAdminMainBinding
+import com.carefastindo.absensi.ui.about.TentangAplikasiActivity
 import com.carefastindo.absensi.ui.login.LoginActivity
 import com.carefastindo.absensi.data.remote.SupabaseClient
-import com.google.android.material.tabs.TabLayoutMediator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -24,61 +24,86 @@ class AdminMainActivity : AppCompatActivity() {
         binding = ActivityAdminMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupViewPager()
-        setupListeners()
+        setupDrawer()
+        
+        // Load default fragment on startup
+        if (savedInstanceState == null) {
+            replaceFragment(TabDashboardFragment(), "Dashboard Admin")
+            binding.navView.setCheckedItem(R.id.nav_admin_dashboard)
+        }
     }
 
-    private fun setupViewPager() {
-        val fragments = listOf(
-            TabRekapFragment(),
-            TabLeaveRequestsFragment(),
-            TabEmployeeCrudFragment(),
-            TabOffSchedulesFragment(),
-            TabEmergencyFragment(),
-            TabSalarySlipFragment(),
-            TabSettingsFragment(),
-            TabViolationsFragment()
+    private fun setupDrawer() {
+        val toggle = ActionBarDrawerToggle(
+            this, binding.drawerLayout, R.string.menu_home, R.string.menu_home
         )
+        binding.drawerLayout.addDrawerListener(toggle)
+        toggle.syncState()
 
-        val tabTitles = listOf(
-            getString(R.string.tab_rekap),
-            getString(R.string.tab_leave_requests),
-            getString(R.string.tab_employee_crud),
-            getString(R.string.tab_off_schedules),
-            getString(R.string.tab_emergency),
-            getString(R.string.tab_salary_slip),
-            getString(R.string.tab_settings),
-            getString(R.string.tab_violations)
-        )
-
-        binding.adminViewPager.adapter = AdminPagerAdapter(this, fragments)
-
-        TabLayoutMediator(binding.adminTabLayout, binding.adminViewPager) { tab, position ->
-            tab.text = tabTitles[position]
-        }.attach()
-    }
-
-    private fun setupListeners() {
-        binding.btnAdminAbout.setOnClickListener {
-            startActivity(Intent(this, com.carefastindo.absensi.ui.about.TentangAplikasiActivity::class.java))
+        binding.btnMenu.setOnClickListener {
+            binding.drawerLayout.openDrawer(GravityCompat.START)
         }
 
-        binding.btnAdminLogout.setOnClickListener {
-            CoroutineScope(Dispatchers.IO).launch {
-                try {
-                    SupabaseClient.auth.signOut()
-                } catch (e: Exception) {}
+        binding.navView.setNavigationItemSelectedListener { menuItem ->
+            when (menuItem.itemId) {
+                R.id.nav_admin_dashboard -> {
+                    replaceFragment(TabDashboardFragment(), "Dashboard Admin")
+                }
+                R.id.nav_admin_rekap -> {
+                    replaceFragment(TabRekapFragment(), "Rekap Absensi")
+                }
+                R.id.nav_admin_leave -> {
+                    replaceFragment(TabLeaveRequestsFragment(), "Pengajuan Izin")
+                }
+                R.id.nav_admin_employee -> {
+                    replaceFragment(TabEmployeeCrudFragment(), "Manajemen Karyawan")
+                }
+                R.id.nav_admin_off -> {
+                    replaceFragment(TabOffSchedulesFragment(), "Jadwal Off Karyawan")
+                }
+                R.id.nav_admin_emergency -> {
+                    replaceFragment(TabEmergencyFragment(), "Darurat & Lembur")
+                }
+                R.id.nav_admin_salary -> {
+                    replaceFragment(TabSalarySlipFragment(), "Slip Gaji Generator")
+                }
+                R.id.nav_admin_settings -> {
+                    replaceFragment(TabSettingsFragment(), "Pengaturan Kantor")
+                }
+                R.id.nav_admin_tentang -> {
+                    startActivity(Intent(this, TentangAplikasiActivity::class.java))
+                }
+                R.id.nav_admin_logout -> {
+                    logoutAdmin()
+                }
             }
-            startActivity(Intent(this, LoginActivity::class.java))
-            finish()
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            true
         }
     }
 
-    inner class AdminPagerAdapter(
-        activity: FragmentActivity,
-        private val fragments: List<Fragment>
-    ) : FragmentStateAdapter(activity) {
-        override fun getItemCount(): Int = fragments.size
-        override fun createFragment(position: Int): Fragment = fragments[position]
+    private fun replaceFragment(fragment: Fragment, title: String) {
+        supportFragmentManager.beginTransaction()
+            .replace(R.id.adminFragmentContainer, fragment)
+            .commit()
+        binding.txtToolbarTitle.text = title
+    }
+
+    private fun logoutAdmin() {
+        CoroutineScope(Dispatchers.IO).launch {
+            try {
+                SupabaseClient.auth.signOut()
+            } catch (e: Exception) {}
+        }
+        startActivity(Intent(this, LoginActivity::class.java))
+        finish()
+    }
+
+    override fun onBackPressed() {
+        if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+        } else {
+            super.onBackPressed()
+        }
     }
 }

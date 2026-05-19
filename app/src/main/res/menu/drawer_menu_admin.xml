@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <group android:checkableBehavior="single">
+        <item
+            android:id="@+id/nav_admin_dashboard"
+            android:icon="@android:drawable/ic_menu_today"
+            android:title="Dashboard Ringkasan" />
+        <item
+            android:id="@+id/nav_admin_rekap"
+            android:icon="@android:drawable/ic_menu_recent_history"
+            android:title="Rekap Absensi" />
+        <item
+            android:id="@+id/nav_admin_leave"
+            android:icon="@android:drawable/ic_menu_my_calendar"
+            android:title="Pengajuan Izin" />
+        <item
+            android:id="@+id/nav_admin_employee"
+            android:icon="@android:drawable/ic_menu_info_details"
+            android:title="Manajemen Karyawan" />
+        <item
+            android:id="@+id/nav_admin_off"
+            android:icon="@android:drawable/ic_menu_day"
+            android:title="Jadwal Off Karyawan" />
+        <item
+            android:id="@+id/nav_admin_emergency"
+            android:icon="@android:drawable/ic_menu_edit"
+            android:title="Darurat &amp; Lembur" />
+        <item
+            android:id="@+id/nav_admin_salary"
+            android:icon="@android:drawable/ic_menu_save"
+            android:title="Slip Gaji Generator" />
+        <item
+            android:id="@+id/nav_admin_settings"
+            android:icon="@android:drawable/ic_menu_preferences"
+            android:title="Pengaturan Kantor" />
+        <item
+            android:id="@+id/nav_admin_tentang"
+            android:icon="@android:drawable/ic_dialog_info"
+            android:title="Tentang Aplikasi" />
+    </group>
+
+    <item android:title="Akun">
+        <menu>
+            <item
+                android:id="@+id/nav_admin_logout"
+                android:icon="@android:drawable/ic_lock_power_off"
+                android:title="@string/menu_logout" />
+        </menu>
+    </item>
+
+</menu>
