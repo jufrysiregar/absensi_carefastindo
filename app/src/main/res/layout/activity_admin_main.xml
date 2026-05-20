@@ -46,7 +46,7 @@
                     android:layout_width="110dp"
                     android:layout_height="40dp"
                     android:layout_marginStart="8dp"
-                    android:src="@drawable/logo"
+                    android:src="@drawable/header_logo"
                     android:scaleType="fitCenter" />
 
                 <Space
