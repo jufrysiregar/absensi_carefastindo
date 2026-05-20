@@ -22,7 +22,7 @@
         android:layout_height="wrap_content"
         android:text="Shift: Pagi"
         android:textSize="14sp"
-        android:textColor="@color/text_secondary"
+        android:textColor="@color/text_secondary_light"
         android:layout_marginBottom="16dp"/>
 
     <TextView
