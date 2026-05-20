@@ -9,8 +9,9 @@
 
     <ImageView
         android:id="@+id/navHeaderIcon"
-        android:layout_width="80dp"
+        android:layout_width="220dp"
         android:layout_height="80dp"
+        android:scaleType="fitStart"
         android:src="@drawable/logo" />
 
     <TextView
