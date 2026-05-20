@@ -249,18 +249,6 @@
                         android:layout_marginBottom="12dp"
                         android:textStyle="bold" />
 
-                    <!-- Logout Button -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnLogout"
-                        android:layout_width="match_parent"
-                        android:layout_height="50dp"
-                        android:text="KEDALAM KELUAR (LOGOUT)"
-                        android:textColor="@color/white"
-                        android:backgroundTint="@color/error"
-                        app:icon="@android:drawable/ic_lock_power_off"
-                        app:cornerRadius="10dp"
-                        android:textStyle="bold" />
-
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

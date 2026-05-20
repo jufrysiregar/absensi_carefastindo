@@ -38,7 +38,7 @@ class ProfilFragment : Fragment() {
 
     private lateinit var btnRegisterFace: MaterialButton
     private lateinit var btnChangePassword: MaterialButton
-    private lateinit var btnLogout: MaterialButton
+
     private lateinit var loadingOverlay: View
 
     override fun onCreateView(
@@ -57,7 +57,7 @@ class ProfilFragment : Fragment() {
 
         btnRegisterFace = view.findViewById(R.id.btnRegisterFace)
         btnChangePassword = view.findViewById(R.id.btnChangePassword)
-        btnLogout = view.findViewById(R.id.btnLogout)
+
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
         setupListeners()
@@ -110,9 +110,7 @@ class ProfilFragment : Fragment() {
             showChangePasswordDialog()
         }
 
-        btnLogout.setOnClickListener {
-            showLogoutConfirmationDialog()
-        }
+
     }
 
     private fun observeUserData() {
@@ -178,32 +176,5 @@ class ProfilFragment : Fragment() {
             .show()
     }
 
-    private fun showLogoutConfirmationDialog() {
-        MaterialAlertDialogBuilder(requireContext())
-            .setTitle("Keluar Aplikasi")
-            .setMessage("Apakah Anda yakin ingin keluar dari akun Anda?")
-            .setPositiveButton("Ya, Keluar") { _, _ ->
-                loadingOverlay.visibility = View.VISIBLE
-                lifecycleScope.launch {
-                    try {
-                        withContext(Dispatchers.IO) {
-                            SupabaseClient.auth.signOut()
-                        }
-                        
-                        // Navigate back to LoginActivity and clear backstack
-                        val intent = Intent(requireActivity(), LoginActivity::class.java)
-                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
-                        startActivity(intent)
-                        requireActivity().finish()
 
-                    } catch (e: Exception) {
-                        Toast.makeText(requireContext(), "Gagal logout: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
-                    } finally {
-                        loadingOverlay.visibility = View.GONE
-                    }
-                }
-            }
-            .setNegativeButton("Batal", null)
-            .show()
-    }
 }
