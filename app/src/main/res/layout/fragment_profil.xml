@@ -164,7 +164,8 @@
                         <!-- Lateness Count -->
                         <RelativeLayout
                             android:layout_width="match_parent"
-                            android:layout_height="wrap_content">
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="12dp">
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
@@ -178,6 +179,27 @@
                                 android:layout_alignParentEnd="true"
                                 android:text="0 Kali"
                                 android:textColor="@color/error"
+                                android:textSize="14sp"
+                                android:textStyle="bold" />
+                        </RelativeLayout>
+
+                        <!-- Face Registration Status -->
+                        <RelativeLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Status Wajah"
+                                android:textColor="@color/text_secondary_light"
+                                android:textSize="14sp" />
+                            <TextView
+                                android:id="@+id/txtFaceStatus"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:layout_alignParentEnd="true"
+                                android:text="Memuat..."
+                                android:textColor="@color/text_primary_light"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
                         </RelativeLayout>
@@ -200,6 +222,19 @@
                     android:layout_height="wrap_content"
                     android:orientation="vertical"
                     android:padding="20dp">
+
+                    <!-- Register Face Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnRegisterFace"
+                        style="@style/Widget.Material3.Button.ElevatedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:text="Registrasi Wajah"
+                        android:textColor="@color/primary"
+                        app:icon="@android:drawable/ic_menu_camera"
+                        app:cornerRadius="10dp"
+                        android:layout_marginBottom="12dp"
+                        android:textStyle="bold" />
 
                     <!-- Change Password Button -->
                     <com.google.android.material.button.MaterialButton

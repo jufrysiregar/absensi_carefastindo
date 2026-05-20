@@ -33,7 +33,9 @@ class ProfilFragment : Fragment() {
     private lateinit var txtShift: TextView
     private lateinit var txtPosition: TextView
     private lateinit var txtLatenessCount: TextView
+    private lateinit var txtFaceStatus: TextView
 
+    private lateinit var btnRegisterFace: MaterialButton
     private lateinit var btnChangePassword: MaterialButton
     private lateinit var btnLogout: MaterialButton
     private lateinit var loadingOverlay: View
@@ -50,7 +52,9 @@ class ProfilFragment : Fragment() {
         txtShift = view.findViewById(R.id.txtShift)
         txtPosition = view.findViewById(R.id.txtPosition)
         txtLatenessCount = view.findViewById(R.id.txtLatenessCount)
+        txtFaceStatus = view.findViewById(R.id.txtFaceStatus)
 
+        btnRegisterFace = view.findViewById(R.id.btnRegisterFace)
         btnChangePassword = view.findViewById(R.id.btnChangePassword)
         btnLogout = view.findViewById(R.id.btnLogout)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
@@ -61,7 +65,46 @@ class ProfilFragment : Fragment() {
         return view
     }
 
+    override fun onResume() {
+        super.onResume()
+        checkFaceRegistrationStatus()
+    }
+
+    private fun checkFaceRegistrationStatus() {
+        lifecycleScope.launch {
+            try {
+                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
+                val faces = withContext(Dispatchers.IO) {
+                    io.github.jan.supabase.postgrest.from("user_faces")
+                        .select { filter { eq("user_id", userId) } }
+                        .data
+                }
+                
+                withContext(Dispatchers.Main) {
+                    if (faces != "[]" && faces.isNotBlank()) {
+                        txtFaceStatus.text = "Sudah Terdaftar"
+                        txtFaceStatus.setTextColor(resources.getColor(R.color.primary, null))
+                        // Optional: you can hide the button if you only allow 1 time registration, or keep it to allow update
+                        btnRegisterFace.text = "Perbarui Wajah"
+                    } else {
+                        txtFaceStatus.text = "Belum Terdaftar"
+                        txtFaceStatus.setTextColor(resources.getColor(R.color.error, null))
+                        btnRegisterFace.text = "Registrasi Wajah"
+                    }
+                }
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    txtFaceStatus.text = "Gagal memuat status"
+                }
+            }
+        }
+    }
+
     private fun setupListeners() {
+        btnRegisterFace.setOnClickListener {
+            startActivity(Intent(requireContext(), FaceRegistrationActivity::class.java))
+        }
+
         btnChangePassword.setOnClickListener {
             showChangePasswordDialog()
         }

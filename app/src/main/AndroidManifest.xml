@@ -69,6 +69,17 @@
             android:exported="false"
             android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
 
+        <!-- Face Recognition Activities -->
+        <activity
+            android:name=".ui.employee.FaceRegistrationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
+
+        <activity
+            android:name=".ui.employee.FaceVerificationActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
+
     </application>
 
 </manifest>

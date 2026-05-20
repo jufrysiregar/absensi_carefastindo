@@ -42,6 +42,8 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
 import java.util.Locale
+import androidx.activity.result.contract.ActivityResultContracts
+import android.app.Activity
 
 class EmployeeDashboardFragment : Fragment() {
 
@@ -58,6 +60,24 @@ class EmployeeDashboardFragment : Fragment() {
     private var hasEmergencyAssignmentToday = false
     private var companyConfig: CompanyConfig? = null
     private var activeAdminNotification: Notification? = null
+
+    // Temp variables for face verification
+    private var pendingAttendanceType: String = ""
+    private var pendingLat: Double = 0.0
+    private var pendingLng: Double = 0.0
+
+    private val faceVerificationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val selfieUrl = result.data?.getStringExtra("selfie_url")
+            if (selfieUrl != null) {
+                saveAttendanceToDatabase(pendingAttendanceType, pendingLat, pendingLng, selfieUrl)
+            } else {
+                Toast.makeText(requireContext(), "Gagal mendapatkan URL selfie", Toast.LENGTH_SHORT).show()
+            }
+        } else {
+            Toast.makeText(requireContext(), "Verifikasi wajah dibatalkan / gagal", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?
@@ -375,7 +395,15 @@ class EmployeeDashboardFragment : Fragment() {
             return
         }
 
-        // Location verified! Proceed to save database entries
+        // Location verified! Proceed to Face Verification
+        pendingAttendanceType = type
+        pendingLat = lat
+        pendingLng = lng
+        val intent = Intent(requireContext(), FaceVerificationActivity::class.java)
+        faceVerificationLauncher.launch(intent)
+    }
+
+    private fun saveAttendanceToDatabase(type: String, lat: Double, lng: Double, selfieUrl: String) {
         lifecycleScope.launch {
             try {
                 val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
@@ -386,24 +414,14 @@ class EmployeeDashboardFragment : Fragment() {
 
                 when (type) {
                     "check_in" -> {
-                        // Check exact lateness status
                         val (jamMasuk, _) = ShiftHelper.getShiftTimes(user.role, user.shiftType)
-                        val limitTerlambatMinutes = 30
-                        
-                        // Parse times to verify limit boundaries
                         val partsMasuk = jamMasuk.split(":")
                         val masukMin = partsMasuk[0].toInt() * 60 + partsMasuk[1].toInt()
-                        
                         val calendar = Calendar.getInstance()
                         val currentMin = calendar.get(Calendar.HOUR_OF_DAY) * 60 + calendar.get(Calendar.MINUTE)
 
-                        val status = if (currentMin <= masukMin + 30) {
-                            "hadir"
-                        } else {
-                            "terlambat"
-                        }
+                        val status = if (currentMin <= masukMin + 30) "hadir" else "terlambat"
 
-                        // Boundary check: > jam_masuk + 2 hours
                         if (currentMin > masukMin + 120) {
                             Toast.makeText(requireContext(), "Batas waktu absen masuk berakhir", Toast.LENGTH_LONG).show()
                             return@launch
@@ -415,18 +433,16 @@ class EmployeeDashboardFragment : Fragment() {
                             checkInTime = nowStr,
                             locationLat = lat,
                             locationLng = lng,
-                            status = status
+                            status = status,
+                            selfieUrl = selfieUrl
                         )
 
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").insert(newAtt)
                         }
 
-                        // Lateness check
                         if (status == "terlambat") {
                             val newLatenessCount = user.latenessCount + 1
-                            
-                            // Update lateness count in users
                             withContext(Dispatchers.IO) {
                                 SupabaseClient.db.from("users").update({
                                     set("lateness_count", newLatenessCount)
@@ -434,11 +450,9 @@ class EmployeeDashboardFragment : Fragment() {
                                     filter { eq("id", userId) }
                                 }
                             }
-
-                            // Notification for admin if >= 3
                             if (newLatenessCount >= 3) {
                                 val adminNotif = Notification(
-                                    userId = "superadmin", // broadcast to admin
+                                    userId = "superadmin",
                                     message = "Pegawai ${user.name} (${user.employeeCode}) telah terlambat 3 kali bulan ini."
                                 )
                                 withContext(Dispatchers.IO) {
@@ -453,6 +467,7 @@ class EmployeeDashboardFragment : Fragment() {
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").update({
                                 set("break_time", nowStr)
+                                set("selfie_url", selfieUrl)
                             }) {
                                 filter {
                                     eq("user_id", userId)
@@ -466,6 +481,7 @@ class EmployeeDashboardFragment : Fragment() {
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").update({
                                 set("check_out_time", nowStr)
+                                set("selfie_url", selfieUrl)
                             }) {
                                 filter {
                                     eq("user_id", userId)
