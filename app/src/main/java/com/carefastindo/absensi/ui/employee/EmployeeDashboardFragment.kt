@@ -128,79 +128,19 @@ class EmployeeDashboardFragment : Fragment() {
         }
 
         btnCheckIn?.setOnClickListener {
-            if (!canStartPresensiFlow("check_in")) return@setOnClickListener
+            if (isOffToday && !hasEmergencyAssignmentToday) {
+                Toast.makeText(requireContext(), "Anda off hari ini", Toast.LENGTH_LONG).show()
+                return@setOnClickListener
+            }
             startPresensiFlow("check_in")
         }
 
         btnBreak?.setOnClickListener {
-            if (!canStartPresensiFlow("break")) return@setOnClickListener
             startPresensiFlow("break")
         }
 
         btnCheckOut?.setOnClickListener {
-            if (!canStartPresensiFlow("check_out")) return@setOnClickListener
             startPresensiFlow("check_out")
-        }
-    }
-
-    private fun canStartPresensiFlow(type: String): Boolean {
-        val user = viewModel.uiState.value.user
-        val att = todayAttendance
-
-        if (user == null) {
-            Toast.makeText(requireContext(), "Data pengguna belum selesai dimuat. Coba lagi sebentar.", Toast.LENGTH_LONG).show()
-            return false
-        }
-
-        return when (type) {
-            "check_in" -> {
-                when {
-                    isOffToday && !hasEmergencyAssignmentToday -> {
-                        Toast.makeText(requireContext(), "Anda off hari ini", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    att?.checkInTime != null -> {
-                        Toast.makeText(requireContext(), "Anda sudah absen masuk hari ini.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    !ShiftHelper.isCheckInWindowActive(user.role, user.shiftType) -> {
-                        Toast.makeText(requireContext(), "Belum masuk jadwal absen masuk.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    else -> true
-                }
-            }
-            "break" -> {
-                when {
-                    att?.checkInTime == null -> {
-                        Toast.makeText(requireContext(), "Silakan absen masuk terlebih dahulu sebelum istirahat.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    att.breakTime != null -> {
-                        Toast.makeText(requireContext(), "Absensi istirahat sudah tercatat.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    att.checkOutTime != null -> {
-                        Toast.makeText(requireContext(), "Anda sudah absen pulang hari ini.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    else -> true
-                }
-            }
-            "check_out" -> {
-                when {
-                    att?.checkInTime == null -> {
-                        Toast.makeText(requireContext(), "Silakan absen masuk terlebih dahulu sebelum pulang.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    att.checkOutTime != null -> {
-                        Toast.makeText(requireContext(), "Absensi pulang sudah tercatat.", Toast.LENGTH_LONG).show()
-                        false
-                    }
-                    else -> true
-                }
-            }
-            else -> false
         }
     }
 
@@ -318,6 +258,7 @@ class EmployeeDashboardFragment : Fragment() {
         if (user != null) {
             val role = user.role
             val shiftType = user.shiftType
+            val breakStart = user.breakStart
 
             // Check In Button
             val hasCheckedIn = att?.checkInTime != null
@@ -374,7 +315,6 @@ class EmployeeDashboardFragment : Fragment() {
                 state.user?.let { u ->
                     txtEmployeeName?.text = u.name
                     txtEmployeeRole?.text = "${u.role} - Shift ${u.shiftType?.capitalize() ?: "Default"}"
-                    updateUI()
                 }
 
                 txtLiveTime?.text = state.liveTime
@@ -487,25 +427,9 @@ class EmployeeDashboardFragment : Fragment() {
                 val todayStr = ShiftHelper.getAttendanceDate(user.role, user.shiftType)
                 val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
                 val nowStr = timeFormat.format(Date())
-                val latestAttendance = withContext(Dispatchers.IO) {
-                    SupabaseClient.db.from("attendance")
-                        .select {
-                            filter {
-                                eq("user_id", userId)
-                                eq("date", todayStr)
-                            }
-                        }.decodeList<Attendance>()
-                        .firstOrNull()
-                }
 
                 when (type) {
                     "check_in" -> {
-                        if (latestAttendance?.checkInTime != null) {
-                            Toast.makeText(requireContext(), "Anda sudah absen masuk hari ini.", Toast.LENGTH_LONG).show()
-                            refreshDashboardData()
-                            return@launch
-                        }
-
                         val (jamMasuk, _) = ShiftHelper.getShiftTimes(user.role, user.shiftType)
                         val partsMasuk = jamMasuk.split(":")
                         val masukMin = partsMasuk[0].toInt() * 60 + partsMasuk[1].toInt()
@@ -556,24 +480,6 @@ class EmployeeDashboardFragment : Fragment() {
                         Toast.makeText(requireContext(), "Absen Masuk Berhasil ($status)!", Toast.LENGTH_LONG).show()
                     }
                     "break" -> {
-                        when {
-                            latestAttendance?.checkInTime == null -> {
-                                Toast.makeText(requireContext(), "Gagal istirahat: Anda belum absen masuk.", Toast.LENGTH_LONG).show()
-                                refreshDashboardData()
-                                return@launch
-                            }
-                            latestAttendance.breakTime != null -> {
-                                Toast.makeText(requireContext(), "Absensi istirahat sudah tercatat.", Toast.LENGTH_LONG).show()
-                                refreshDashboardData()
-                                return@launch
-                            }
-                            latestAttendance.checkOutTime != null -> {
-                                Toast.makeText(requireContext(), "Anda sudah absen pulang hari ini.", Toast.LENGTH_LONG).show()
-                                refreshDashboardData()
-                                return@launch
-                            }
-                        }
-
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").update({
                                 set("break_time", nowStr)
@@ -590,19 +496,6 @@ class EmployeeDashboardFragment : Fragment() {
                         Toast.makeText(requireContext(), "Istirahat Berhasil Dimulai!", Toast.LENGTH_LONG).show()
                     }
                     "check_out" -> {
-                        when {
-                            latestAttendance?.checkInTime == null -> {
-                                Toast.makeText(requireContext(), "Gagal absen pulang: Anda belum absen masuk.", Toast.LENGTH_LONG).show()
-                                refreshDashboardData()
-                                return@launch
-                            }
-                            latestAttendance.checkOutTime != null -> {
-                                Toast.makeText(requireContext(), "Absensi pulang sudah tercatat.", Toast.LENGTH_LONG).show()
-                                refreshDashboardData()
-                                return@launch
-                            }
-                        }
-
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").update({
                                 set("check_out_time", nowStr)
