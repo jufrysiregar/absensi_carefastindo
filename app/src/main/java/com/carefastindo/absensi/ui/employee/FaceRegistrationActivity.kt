@@ -127,9 +127,10 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
             detector.process(image)
                 .addOnSuccessListener { faces ->
-                    if (faces.size == 1 && !isProcessing) {
+                    if (faces.isNotEmpty() && !isProcessing) {
                         isProcessing = true
-                        val face = faces[0]
+                        // Ambil wajah dengan ukuran paling besar (mengabaikan false positive di background)
+                        val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } ?: faces[0]
                         val boundingBox = face.boundingBox
 
                         // Extract face bitmap
@@ -162,11 +163,10 @@ class FaceRegistrationActivity : AppCompatActivity() {
                         } else {
                             isProcessing = false
                         }
-                    } else {
+                    } else if (!isProcessing) {
                         // instruction
                         runOnUiThread {
                             if (faces.isEmpty()) txtInstruction.text = "Tidak ada wajah terdeteksi"
-                            else if (faces.size > 1) txtInstruction.text = "Terdapat lebih dari 1 wajah"
                         }
                     }
                 }
