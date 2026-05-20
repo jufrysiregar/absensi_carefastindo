@@ -30,7 +30,7 @@ class ProfilFragment : Fragment() {
     private lateinit var txtName: TextView
     private lateinit var txtEmail: TextView
     private lateinit var txtEmployeeCode: TextView
-    private lateinit var txtRole: TextView
+
     private lateinit var txtShift: TextView
     private lateinit var txtPosition: TextView
     private lateinit var txtLatenessCount: TextView
@@ -49,7 +49,7 @@ class ProfilFragment : Fragment() {
         txtName = view.findViewById(R.id.txtName)
         txtEmail = view.findViewById(R.id.txtEmail)
         txtEmployeeCode = view.findViewById(R.id.txtEmployeeCode)
-        txtRole = view.findViewById(R.id.txtRole)
+
         txtShift = view.findViewById(R.id.txtShift)
         txtPosition = view.findViewById(R.id.txtPosition)
         txtLatenessCount = view.findViewById(R.id.txtLatenessCount)
@@ -120,7 +120,7 @@ class ProfilFragment : Fragment() {
                 txtName.text = u.name
                 txtEmail.text = u.email
                 txtEmployeeCode.text = u.employeeCode ?: "--"
-                txtRole.text = u.role
+
                 txtShift.text = u.shiftType?.capitalize() ?: "Default"
                 txtPosition.text = u.position
                 txtLatenessCount.text = "${u.latenessCount} Kali"

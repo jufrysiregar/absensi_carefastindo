@@ -81,7 +81,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Kode Pegawai"
+                                android:text="ID Pegawai"
                                 android:textColor="@color/text_secondary_light"
                                 android:textSize="14sp" />
                             <TextView
@@ -95,27 +95,7 @@
                                 android:textStyle="bold" />
                         </RelativeLayout>
 
-                        <!-- Role -->
-                        <RelativeLayout
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:layout_marginBottom="12dp">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Level / Peran"
-                                android:textColor="@color/text_secondary_light"
-                                android:textSize="14sp" />
-                            <TextView
-                                android:id="@+id/txtRole"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:layout_alignParentEnd="true"
-                                android:text="Pegawai"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="14sp"
-                                android:textStyle="bold" />
-                        </RelativeLayout>
+
 
                         <!-- Shift -->
                         <RelativeLayout
@@ -147,7 +127,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="Posisi / Jabatan"
+                                android:text="Posisi Jabatan"
                                 android:textColor="@color/text_secondary_light"
                                 android:textSize="14sp" />
                             <TextView
