@@ -83,9 +83,21 @@ class ForgotPasswordActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    // Kirim 6-digit OTP ke email (BUKAN link redirect)
+                    // 1. Cek apakah email terdaftar di tabel users
+                    val checkUser = SupabaseClient.db.from("users")
+                        .select { filter { eq("email", email) } }
+                        .data
+
+                    if (checkUser == "[]" || checkUser.isBlank()) {
+                        throw Exception("Email tidak terdaftar di sistem kami.")
+                    }
+
+                    // 2. Kirim 6-digit OTP ke email (atau Magic Link)
                     SupabaseClient.auth.signInWith(OTP) {
                         this.email = email
+                        // Gunakan deep link agar tidak redirect ke localhost:3000 jika user mengklik link di email
+                        // (Pastikan carefastindo://reset di-whitelist di Supabase Dashboard)
+                        // this.redirectUrl = "carefastindo://reset" 
                     }
                 }
                 requestedEmail = email
