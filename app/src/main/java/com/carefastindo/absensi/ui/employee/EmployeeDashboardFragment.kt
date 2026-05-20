@@ -69,11 +69,7 @@ class EmployeeDashboardFragment : Fragment() {
     private val faceVerificationLauncher = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
         if (result.resultCode == Activity.RESULT_OK) {
             val selfieUrl = result.data?.getStringExtra("selfie_url")
-            if (selfieUrl != null) {
-                saveAttendanceToDatabase(pendingAttendanceType, pendingLat, pendingLng, selfieUrl)
-            } else {
-                Toast.makeText(requireContext(), "Gagal mendapatkan URL selfie", Toast.LENGTH_SHORT).show()
-            }
+            saveAttendanceToDatabase(pendingAttendanceType, pendingLat, pendingLng, selfieUrl)
         } else {
             Toast.makeText(requireContext(), "Verifikasi wajah dibatalkan / gagal", Toast.LENGTH_SHORT).show()
         }
@@ -423,7 +419,7 @@ class EmployeeDashboardFragment : Fragment() {
         faceVerificationLauncher.launch(intent)
     }
 
-    private fun saveAttendanceToDatabase(type: String, lat: Double, lng: Double, selfieUrl: String) {
+    private fun saveAttendanceToDatabase(type: String, lat: Double, lng: Double, selfieUrl: String?) {
         lifecycleScope.launch {
             try {
                 val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
@@ -487,7 +483,9 @@ class EmployeeDashboardFragment : Fragment() {
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").update({
                                 set("break_time", nowStr)
-                                set("selfie_url", selfieUrl)
+                                if (selfieUrl != null) {
+                                    set("selfie_url", selfieUrl)
+                                }
                             }) {
                                 filter {
                                     eq("user_id", userId)
@@ -501,7 +499,9 @@ class EmployeeDashboardFragment : Fragment() {
                         withContext(Dispatchers.IO) {
                             SupabaseClient.db.from("attendance").update({
                                 set("check_out_time", nowStr)
-                                set("selfie_url", selfieUrl)
+                                if (selfieUrl != null) {
+                                    set("selfie_url", selfieUrl)
+                                }
                             }) {
                                 filter {
                                     eq("user_id", userId)

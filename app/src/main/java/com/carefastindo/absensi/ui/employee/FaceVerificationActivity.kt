@@ -4,11 +4,6 @@ import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Matrix
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -30,6 +25,7 @@ import androidx.lifecycle.lifecycleScope
 import com.carefastindo.absensi.R
 import com.carefastindo.absensi.data.model.UserFace
 import com.carefastindo.absensi.data.remote.SupabaseClient
+import com.carefastindo.absensi.utils.FaceImageUtils
 import com.carefastindo.absensi.utils.FaceVerificationHelper
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
@@ -67,8 +63,14 @@ class FaceVerificationActivity : AppCompatActivity() {
         txtInstruction = findViewById(R.id.txtInstruction)
         progressBar = findViewById(R.id.progressBar)
 
-        faceVerificationHelper = FaceVerificationHelper(this)
         cameraExecutor = Executors.newSingleThreadExecutor()
+        faceVerificationHelper = FaceVerificationHelper(this)
+        if (!faceVerificationHelper.isReady()) {
+            Toast.makeText(this, "Model face recognition gagal dimuat. Pastikan file model tersedia.", Toast.LENGTH_LONG).show()
+            setResult(RESULT_CANCELED)
+            finish()
+            return
+        }
 
         val detectorOptions = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
@@ -89,7 +91,8 @@ class FaceVerificationActivity : AppCompatActivity() {
     private fun loadBaseFaceVector() {
         lifecycleScope.launch {
             try {
-                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
+                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+                    ?: throw IllegalStateException("Sesi login tidak ditemukan")
                 val userFaces = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("user_faces")
                         .select { filter { eq("user_id", userId) } }
@@ -116,7 +119,12 @@ class FaceVerificationActivity : AppCompatActivity() {
                     }
                 }
             } catch (e: Exception) {
-                e.printStackTrace()
+                Log.e("FaceVerification", "Gagal memuat data wajah", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(this@FaceVerificationActivity, "Gagal memuat data wajah: ${e.message}", Toast.LENGTH_LONG).show()
+                    setResult(RESULT_CANCELED)
+                    finish()
+                }
             }
         }
     }
@@ -170,7 +178,7 @@ class FaceVerificationActivity : AppCompatActivity() {
             return
         }
 
-        val bitmap = imageProxyToBitmap(imageProxy)
+        val bitmap = FaceImageUtils.imageProxyToBitmap(imageProxy)
         if (bitmap != null) {
             // Resize terlebih dahulu sebelum rotasi untuk menghemat CPU & Memori
             val maxDim = bitmap.width.coerceAtLeast(bitmap.height)
@@ -183,7 +191,7 @@ class FaceVerificationActivity : AppCompatActivity() {
                 bitmap
             }
 
-            val rotatedBitmap = rotateBitmap(resizedBitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
+            val rotatedBitmap = FaceImageUtils.rotateBitmap(resizedBitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
             if (rotatedBitmap != resizedBitmap) {
                 resizedBitmap.recycle()
             }
@@ -213,15 +221,16 @@ class FaceVerificationActivity : AppCompatActivity() {
                         isProcessing = true
 
                         try {
-                            // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
-                            val marginX = (boundingBox.width() * 0.2f).toInt()
-                            val marginY = (boundingBox.height() * 0.2f).toInt()
-                            val left = (boundingBox.left - marginX).coerceAtLeast(0)
-                            val top = (boundingBox.top - marginY).coerceAtLeast(0)
-                            val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
-                            val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
-                            
-                            val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
+                            val faceBitmap = FaceImageUtils.cropFaceBitmap(rotatedBitmap, boundingBox)
+                            if (faceBitmap == null) {
+                                consecutiveMatchCount = 0
+                                runOnUiThread {
+                                    txtInstruction.text = "Posisikan wajah lebih pas di dalam kotak"
+                                }
+                                isProcessing = false
+                                return@addOnSuccessListener
+                            }
+
                             val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
 
                             if (embedding != null && baseFaceVectors.isNotEmpty()) {
@@ -275,6 +284,9 @@ class FaceVerificationActivity : AppCompatActivity() {
                     Log.e("FaceVerification", "Gagal deteksi wajah: ${e.message}", e)
                 }
                 .addOnCompleteListener {
+                    if (!rotatedBitmap.isRecycled) {
+                        rotatedBitmap.recycle()
+                    }
                     imageProxy.close()
                 }
         } else {
@@ -285,33 +297,20 @@ class FaceVerificationActivity : AppCompatActivity() {
     private fun uploadSelfieAndFinish(faceBitmap: Bitmap) {
         runOnUiThread {
             progressBar.visibility = View.VISIBLE
-            txtInstruction.text = "Wajah terverifikasi! Mengunggah foto..."
+            txtInstruction.text = "Wajah terverifikasi! Menyimpan absensi..."
         }
 
         lifecycleScope.launch {
             try {
-                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
-                
-                // Convert bitmap to byte array
-                val baos = ByteArrayOutputStream()
-                faceBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
-                val byteArray = baos.toByteArray()
-                
-                // Upload photo to attendance-selfies
-                val timestamp = System.currentTimeMillis()
-                val photoPath = "$userId/${timestamp}_selfie.jpg"
-                
-                withContext(Dispatchers.IO) {
-                    SupabaseClient.storage.from("attendance-selfies").upload(photoPath, byteArray) {
-                        upsert = true
-                    }
-                }
-                
-                val photoUrl = SupabaseClient.storage.from("attendance-selfies").publicUrl(photoPath)
+                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+                    ?: throw IllegalStateException("Sesi login tidak ditemukan")
+                val photoUrl = uploadAttendanceSelfie(userId, faceBitmap)
                 
                 withContext(Dispatchers.Main) {
                     val resultIntent = Intent()
-                    resultIntent.putExtra("selfie_url", photoUrl)
+                    if (photoUrl != null) {
+                        resultIntent.putExtra("selfie_url", photoUrl)
+                    }
                     setResult(RESULT_OK, resultIntent)
                     finish()
                 }
@@ -319,53 +318,69 @@ class FaceVerificationActivity : AppCompatActivity() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 withContext(Dispatchers.Main) {
-                    Toast.makeText(this@FaceVerificationActivity, "Gagal mengunggah selfie: ${e.message}", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@FaceVerificationActivity, "Gagal verifikasi wajah: ${e.message}", Toast.LENGTH_LONG).show()
                     isProcessing = false
                     progressBar.visibility = View.GONE
+                }
+            } finally {
+                if (!faceBitmap.isRecycled) {
+                    faceBitmap.recycle()
                 }
             }
         }
     }
 
-    private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
+    private suspend fun uploadAttendanceSelfie(userId: String, faceBitmap: Bitmap): String? {
+        return try {
+            val baos = ByteArrayOutputStream()
+            faceBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
+            val byteArray = baos.toByteArray()
+            val photoPath = "$userId/${System.currentTimeMillis()}_selfie.jpg"
 
-        val ySize = yBuffer.remaining()
-        val uSize = uBuffer.remaining()
-        val vSize = vBuffer.remaining()
+            withContext(Dispatchers.IO) {
+                SupabaseClient.storage.from("attendance-selfies").upload(photoPath, byteArray) {
+                    upsert = true
+                }
+            }
 
-        val nv21 = ByteArray(ySize + uSize + vSize)
-
-        yBuffer.get(nv21, 0, ySize)
-        vBuffer.get(nv21, ySize, vSize)
-        uBuffer.get(nv21, ySize + vSize, uSize)
-
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, yuvImage.width, yuvImage.height), 100, out)
-        val imageBytes = out.toByteArray()
-        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-    }
-
-    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
-        val matrix = Matrix()
-        matrix.postRotate(degrees)
-        matrix.postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+            SupabaseClient.storage.from("attendance-selfies").publicUrl(photoPath)
+        } catch (e: Exception) {
+            Log.w("FaceVerification", "Selfie absensi tidak tersimpan, absensi tetap dilanjutkan", e)
+            null
+        }
     }
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
         ContextCompat.checkSelfPermission(baseContext, it) == PackageManager.PERMISSION_GRANTED
     }
 
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS && allPermissionsGranted()) {
+            startCamera()
+        } else if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            Toast.makeText(this, "Izin kamera diperlukan untuk verifikasi wajah.", Toast.LENGTH_LONG).show()
+            setResult(RESULT_CANCELED)
+            finish()
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        cameraExecutor.shutdown()
-        faceVerificationHelper.close()
+        if (::cameraExecutor.isInitialized) {
+            cameraExecutor.shutdown()
+        }
+        if (::faceVerificationHelper.isInitialized) {
+            faceVerificationHelper.close()
+        }
         try {
-            faceDetector.close()
+            if (::faceDetector.isInitialized) {
+                faceDetector.close()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

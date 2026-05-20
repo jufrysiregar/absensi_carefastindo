@@ -3,11 +3,6 @@ package com.carefastindo.absensi.ui.employee
 import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.ImageFormat
-import android.graphics.Matrix
-import android.graphics.Rect
-import android.graphics.YuvImage
 import android.os.Bundle
 import android.util.Log
 import android.view.View
@@ -29,6 +24,7 @@ import androidx.lifecycle.lifecycleScope
 import com.carefastindo.absensi.R
 import com.carefastindo.absensi.data.model.UserFace
 import com.carefastindo.absensi.data.remote.SupabaseClient
+import com.carefastindo.absensi.utils.FaceImageUtils
 import com.carefastindo.absensi.utils.FaceVerificationHelper
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.face.FaceDetection
@@ -71,8 +67,13 @@ class FaceRegistrationActivity : AppCompatActivity() {
         txtInstruction = findViewById(R.id.txtInstruction)
         progressBar = findViewById(R.id.progressBar)
 
-        faceVerificationHelper = FaceVerificationHelper(this)
         cameraExecutor = Executors.newSingleThreadExecutor()
+        faceVerificationHelper = FaceVerificationHelper(this)
+        if (!faceVerificationHelper.isReady()) {
+            Toast.makeText(this, "Model face recognition gagal dimuat. Pastikan file model tersedia.", Toast.LENGTH_LONG).show()
+            finish()
+            return
+        }
 
         val detectorOptions = FaceDetectorOptions.Builder()
             .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
@@ -140,7 +141,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
         }
 
         // 1. Optimasi Gambar (Resize ke maks 480x360 sebelum deteksi & encoding)
-        val bitmap = imageProxyToBitmap(imageProxy)
+        val bitmap = FaceImageUtils.imageProxyToBitmap(imageProxy)
         if (bitmap != null) {
             // Resize terlebih dahulu sebelum rotasi untuk menghemat CPU & Memori
             val maxDim = bitmap.width.coerceAtLeast(bitmap.height)
@@ -153,7 +154,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 bitmap
             }
 
-            val rotatedBitmap = rotateBitmap(resizedBitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
+            val rotatedBitmap = FaceImageUtils.rotateBitmap(resizedBitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
             if (rotatedBitmap != resizedBitmap) {
                 resizedBitmap.recycle()
             }
@@ -224,15 +225,15 @@ class FaceRegistrationActivity : AppCompatActivity() {
                         isProcessing = true
                         
                         try {
-                            // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
-                            val marginX = (boundingBox.width() * 0.2f).toInt()
-                            val marginY = (boundingBox.height() * 0.2f).toInt()
-                            val left = (boundingBox.left - marginX).coerceAtLeast(0)
-                            val top = (boundingBox.top - marginY).coerceAtLeast(0)
-                            val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
-                            val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
-                            
-                            val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
+                            val faceBitmap = FaceImageUtils.cropFaceBitmap(rotatedBitmap, boundingBox)
+                            if (faceBitmap == null) {
+                                runOnUiThread {
+                                    txtInstruction.text = "Posisikan wajah lebih pas di dalam kotak"
+                                }
+                                isProcessing = false
+                                return@addOnSuccessListener
+                            }
+
                             val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
 
                             if (embedding != null) {
@@ -248,6 +249,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                                     runOnUiThread {
                                         txtInstruction.text = "$stepProgressText\n(Mengambil data wajah $stepName: ${tempStepEmbeddings.size}/3)..."
                                     }
+                                    faceBitmap.recycle()
                                     // Pacing: Beri jeda kecil agar frame selanjutnya bervariasi sedikit
                                     lifecycleScope.launch {
                                         kotlinx.coroutines.delay(100)
@@ -261,10 +263,12 @@ class FaceRegistrationActivity : AppCompatActivity() {
                                         moveToNextStep(faceBitmap)
                                     } else {
                                         tempStepEmbeddings.clear()
+                                        faceBitmap.recycle()
                                         isProcessing = false
                                     }
                                 }
                             } else {
+                                faceBitmap.recycle()
                                 isProcessing = false
                             }
                         } catch (e: Exception) {
@@ -285,10 +289,13 @@ class FaceRegistrationActivity : AppCompatActivity() {
                         }
                     }
                 }
-                .addOnFailureListener {
-                    // error
+                .addOnFailureListener { e ->
+                    Log.e("FaceRegistration", "Gagal deteksi wajah: ${e.message}", e)
                 }
                 .addOnCompleteListener {
+                    if (!rotatedBitmap.isRecycled) {
+                        rotatedBitmap.recycle()
+                    }
                     imageProxy.close()
                 }
         } else {
@@ -309,6 +316,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 RegistrationStep.FRONT -> {
                     currentStep = RegistrationStep.LEFT
                     isDelaying = true
+                    lastBitmap.recycle()
                     runOnUiThread {
                         progressBar.visibility = View.GONE
                         txtInstruction.text = "Wajah depan berhasil direkam!\nLangkah 2 dari 3: Tolehkan wajah sedikit ke Kiri"
@@ -320,6 +328,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 RegistrationStep.LEFT -> {
                     currentStep = RegistrationStep.RIGHT
                     isDelaying = true
+                    lastBitmap.recycle()
                     runOnUiThread {
                         progressBar.visibility = View.GONE
                         txtInstruction.text = "Wajah kiri berhasil direkam!\nLangkah 3 dari 3: Tolehkan wajah sedikit ke Kanan"
@@ -348,22 +357,16 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
         lifecycleScope.launch {
             try {
-                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
-                
-                val baos = ByteArrayOutputStream()
-                faceBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
-                val byteArray = baos.toByteArray()
-                
-                val timestamp = System.currentTimeMillis()
-                val photoPath = "$userId/${timestamp}_face.jpg"
-                
-                withContext(Dispatchers.IO) {
-                    SupabaseClient.storage.from("face_photos").upload(photoPath, byteArray) {
-                        upsert = true
-                    }
+                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+                    ?: throw IllegalStateException("Sesi login tidak ditemukan")
+
+                val requiredSteps = listOf(RegistrationStep.FRONT, RegistrationStep.LEFT, RegistrationStep.RIGHT)
+                val embeddings = requiredSteps.map { step ->
+                    capturedEmbeddings[step]
+                        ?: throw IllegalStateException("Data wajah belum lengkap. Silakan ulangi registrasi.")
                 }
-                
-                val photoUrl = SupabaseClient.storage.from("face_photos").publicUrl(photoPath)
+
+                val photoUrl = uploadReferencePhoto(userId, faceBitmap)
                 
                 withContext(Dispatchers.IO) {
                     try {
@@ -373,7 +376,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                     } catch (e: Exception) {}
                 }
 
-                val facesToInsert = capturedEmbeddings.values.map { embedding ->
+                val facesToInsert = embeddings.map { embedding ->
                     val jsonArray = JSONArray()
                     for (f in embedding) {
                         jsonArray.put(f.toDouble())
@@ -402,39 +405,48 @@ class FaceRegistrationActivity : AppCompatActivity() {
                     capturedEmbeddings.clear()
                     tempStepEmbeddings.clear()
                     progressBar.visibility = View.GONE
+                    txtInstruction.text = "Registrasi gagal. Posisikan wajah Anda di dalam kotak dan coba lagi."
+                }
+            } finally {
+                if (!faceBitmap.isRecycled) {
+                    faceBitmap.recycle()
                 }
             }
         }
     }
 
-    private fun imageProxyToBitmap(image: ImageProxy): Bitmap? {
-        val yBuffer = image.planes[0].buffer
-        val uBuffer = image.planes[1].buffer
-        val vBuffer = image.planes[2].buffer
+    private suspend fun uploadReferencePhoto(userId: String, faceBitmap: Bitmap): String? {
+        return try {
+            val baos = ByteArrayOutputStream()
+            faceBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
+            val byteArray = baos.toByteArray()
+            val photoPath = "$userId/${System.currentTimeMillis()}_face.jpg"
 
-        val ySize = yBuffer.remaining()
-        val uSize = uBuffer.remaining()
-        val vSize = vBuffer.remaining()
+            withContext(Dispatchers.IO) {
+                SupabaseClient.storage.from("face_photos").upload(photoPath, byteArray) {
+                    upsert = true
+                }
+            }
 
-        val nv21 = ByteArray(ySize + uSize + vSize)
-
-        yBuffer.get(nv21, 0, ySize)
-        vBuffer.get(nv21, ySize, vSize)
-        uBuffer.get(nv21, ySize + vSize, uSize)
-
-        val yuvImage = YuvImage(nv21, ImageFormat.NV21, image.width, image.height, null)
-        val out = ByteArrayOutputStream()
-        yuvImage.compressToJpeg(Rect(0, 0, yuvImage.width, yuvImage.height), 100, out)
-        val imageBytes = out.toByteArray()
-        return BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
+            SupabaseClient.storage.from("face_photos").publicUrl(photoPath)
+        } catch (e: Exception) {
+            Log.w("FaceRegistration", "Foto referensi wajah tidak tersimpan, registrasi tetap dilanjutkan", e)
+            null
+        }
     }
 
-    private fun rotateBitmap(bitmap: Bitmap, degrees: Float): Bitmap {
-        val matrix = Matrix()
-        matrix.postRotate(degrees)
-        // Adjust for front camera mirror effect
-        matrix.postScale(-1f, 1f, bitmap.width / 2f, bitmap.height / 2f)
-        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
+    override fun onRequestPermissionsResult(
+        requestCode: Int,
+        permissions: Array<out String>,
+        grantResults: IntArray
+    ) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_CODE_PERMISSIONS && allPermissionsGranted()) {
+            startCamera()
+        } else if (requestCode == REQUEST_CODE_PERMISSIONS) {
+            Toast.makeText(this, "Izin kamera diperlukan untuk registrasi wajah.", Toast.LENGTH_LONG).show()
+            finish()
+        }
     }
 
     private fun allPermissionsGranted() = REQUIRED_PERMISSIONS.all {
@@ -443,10 +455,16 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         super.onDestroy()
-        cameraExecutor.shutdown()
-        faceVerificationHelper.close()
+        if (::cameraExecutor.isInitialized) {
+            cameraExecutor.shutdown()
+        }
+        if (::faceVerificationHelper.isInitialized) {
+            faceVerificationHelper.close()
+        }
         try {
-            faceDetector.close()
+            if (::faceDetector.isInitialized) {
+                faceDetector.close()
+            }
         } catch (e: Exception) {
             e.printStackTrace()
         }

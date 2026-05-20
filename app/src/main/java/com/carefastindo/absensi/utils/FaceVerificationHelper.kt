@@ -2,62 +2,101 @@ package com.carefastindo.absensi.utils
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.util.Log
+import org.tensorflow.lite.DataType
 import org.tensorflow.lite.Interpreter
-import java.io.FileInputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.channels.FileChannel
 import kotlin.math.sqrt
 
 class FaceVerificationHelper(context: Context) {
     private var interpreter: Interpreter? = null
-    
-    // Model input is typically 112x112, 3 channels (RGB) for MobileFaceNet
-    private val inputSize = 112
-    private val embeddingSize = 192 // MobileFaceNet outputs a 192-dimensional vector
+    private var modelBuffer: ByteBuffer? = null
+    private var inputSize = 112
+    private var embeddingSize = 192
+    private var inputDataType = DataType.FLOAT32
 
     init {
         try {
-            val assetFileDescriptor = context.assets.openFd("mobilefacenet.tflite")
-            val fileInputStream = FileInputStream(assetFileDescriptor.fileDescriptor)
-            val fileChannel = fileInputStream.channel
-            val startOffset = assetFileDescriptor.startOffset
-            val declaredLength = assetFileDescriptor.declaredLength
-            val mappedByteBuffer = fileChannel.map(FileChannel.MapMode.READ_ONLY, startOffset, declaredLength)
+            val modelBytes = context.assets.open("mobilefacenet.tflite").use { it.readBytes() }
+            val modelBuffer = ByteBuffer.allocateDirect(modelBytes.size)
+            modelBuffer.order(ByteOrder.nativeOrder())
+            modelBuffer.put(modelBytes)
+            modelBuffer.rewind()
+            this.modelBuffer = modelBuffer
             
             val options = Interpreter.Options()
             options.numThreads = 4
-            interpreter = Interpreter(mappedByteBuffer, options)
+            interpreter = Interpreter(modelBuffer, options)
+
+            interpreter?.let { interp ->
+                val inputTensor = interp.getInputTensor(0)
+                val inputShape = inputTensor.shape()
+                val spatialInputSize = inputShape
+                    .filter { it > 1 && it != 3 }
+                    .firstOrNull()
+                if (spatialInputSize != null) {
+                    inputSize = spatialInputSize
+                }
+                inputDataType = inputTensor.dataType()
+
+                val outputShape = interp.getOutputTensor(0).shape()
+                embeddingSize = outputShape.filter { it > 1 }.maxOrNull() ?: embeddingSize
+            }
         } catch (e: Exception) {
-            e.printStackTrace()
+            Log.e(TAG, "Gagal memuat model face recognition", e)
         }
     }
+
+    fun isReady(): Boolean = interpreter != null
 
     fun extractEmbedding(faceBitmap: Bitmap): FloatArray? {
         val interp = interpreter ?: return null
 
-        val resizedBitmap = Bitmap.createScaledBitmap(faceBitmap, inputSize, inputSize, true)
-        val inputBuffer = ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4) // 1 batch * 112 * 112 * 3 channels * 4 bytes(float)
-        inputBuffer.order(ByteOrder.nativeOrder())
-
-        val intValues = IntArray(inputSize * inputSize)
-        resizedBitmap.getPixels(intValues, 0, resizedBitmap.width, 0, 0, resizedBitmap.width, resizedBitmap.height)
-
-        // Normalize depending on the model (Usually (val - 127.5)/128 or (val-128)/128)
-        var pixel = 0
-        for (i in 0 until inputSize) {
-            for (j in 0 until inputSize) {
-                val value = intValues[pixel++]
-                inputBuffer.putFloat(((value shr 16 and 0xFF) - 127.5f) / 128f)
-                inputBuffer.putFloat(((value shr 8 and 0xFF) - 127.5f) / 128f)
-                inputBuffer.putFloat(((value and 0xFF) - 127.5f) / 128f)
+        return try {
+            val resizedBitmap = Bitmap.createScaledBitmap(faceBitmap, inputSize, inputSize, true)
+            val inputBuffer = when (inputDataType) {
+                DataType.UINT8 -> ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3)
+                else -> ByteBuffer.allocateDirect(1 * inputSize * inputSize * 3 * 4)
             }
+            inputBuffer.order(ByteOrder.nativeOrder())
+
+            val intValues = IntArray(inputSize * inputSize)
+            resizedBitmap.getPixels(intValues, 0, resizedBitmap.width, 0, 0, resizedBitmap.width, resizedBitmap.height)
+
+            var pixel = 0
+            for (i in 0 until inputSize) {
+                for (j in 0 until inputSize) {
+                    val value = intValues[pixel++]
+                    val r = value shr 16 and 0xFF
+                    val g = value shr 8 and 0xFF
+                    val b = value and 0xFF
+
+                    if (inputDataType == DataType.UINT8) {
+                        inputBuffer.put(r.toByte())
+                        inputBuffer.put(g.toByte())
+                        inputBuffer.put(b.toByte())
+                    } else {
+                        inputBuffer.putFloat((r - 127.5f) / 128f)
+                        inputBuffer.putFloat((g - 127.5f) / 128f)
+                        inputBuffer.putFloat((b - 127.5f) / 128f)
+                    }
+                }
+            }
+            inputBuffer.rewind()
+
+            val outputBuffer = Array(1) { FloatArray(embeddingSize) }
+            interp.run(inputBuffer, outputBuffer)
+
+            if (resizedBitmap != faceBitmap) {
+                resizedBitmap.recycle()
+            }
+
+            l2Normalize(outputBuffer[0])
+        } catch (e: Exception) {
+            Log.e(TAG, "Gagal mengekstrak embedding wajah", e)
+            null
         }
-
-        val outputBuffer = Array(1) { FloatArray(embeddingSize) }
-        interp.run(inputBuffer, outputBuffer)
-
-        return l2Normalize(outputBuffer[0])
     }
 
     private fun l2Normalize(embeddings: FloatArray): FloatArray {
@@ -66,6 +105,7 @@ class FaceVerificationHelper(context: Context) {
             sum += f * f
         }
         val norm = sqrt(sum.toDouble()).toFloat()
+        if (norm == 0f) return embeddings
         for (i in embeddings.indices) {
             embeddings[i] /= norm
         }
@@ -104,5 +144,10 @@ class FaceVerificationHelper(context: Context) {
     fun close() {
         interpreter?.close()
         interpreter = null
+        modelBuffer = null
+    }
+
+    companion object {
+        private const val TAG = "FaceVerificationHelper"
     }
 }
