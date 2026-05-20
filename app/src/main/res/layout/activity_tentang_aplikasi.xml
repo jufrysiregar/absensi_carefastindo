@@ -75,7 +75,7 @@
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Absensi Pegawai PT. Carefastindo Indonesia"
+                        android:text="PERANCANGAN APLIKASI ABSENSI PEGAWAI MENGGUNAKAN METODE QR CODE BERBASIS ANDROID PADA PT. CAREFASTINDO"
                         android:textColor="@color/text_primary_light"
                         android:textSize="18sp"
                         android:textStyle="bold"
@@ -417,6 +417,138 @@
                         </LinearLayout>
                     </LinearLayout>
 
+                    <!-- Section: Timeline Pengembangan Aplikasi -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Timeline Pengembangan Aplikasi:"
+                        android:textColor="@color/primary"
+                        android:textSize="16sp"
+                        android:textStyle="bold"
+                        android:layout_marginTop="24dp"
+                        android:layout_marginBottom="12dp" />
+
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#E5E7EB"
+                        android:layout_marginBottom="16dp" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical">
+
+                        <!-- Item 1 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="•"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="14sp"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="22 Nov 2022 – 13 Feb 2023: Acc Judul &amp; Acc Proposal Skripsi."
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <!-- Item 2 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="•"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="14sp"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="01 Agu 2023: Revisi judul dan implementasi fitur keamanan aplikasi."
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <!-- Item 3 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="•"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="14sp"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="07 Sep 2023: Demo / Pemaparan aplikasi."
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <!-- Item 4 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal"
+                            android:layout_marginBottom="8dp">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="•"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="14sp"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="11 Des 2023: Presentasi aplikasi dan Sidang Skripsi."
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+
+                        <!-- Item 5 -->
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:orientation="horizontal">
+                            <TextView
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="•"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="14sp"
+                                android:layout_marginEnd="8dp" />
+                            <TextView
+                                android:layout_width="0dp"
+                                android:layout_weight="1"
+                                android:layout_height="wrap_content"
+                                android:text="18 Mei 2026 – 21 Mei 2026: Finalisasi / Penyempurnaan sistem [Selesai]."
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="13sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
@@ -426,7 +558,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="24dp"
-                android:text="© 2026 M. Juffri Siregar. All Rights Reserved."
+                android:text="© 2023 M. Juffri Siregar | Absensi Pegawai PT. Carefastindo Indonesia. All Rights Reserved."
                 android:textColor="@color/text_secondary_light"
                 android:textSize="12sp"
                 android:gravity="center" />

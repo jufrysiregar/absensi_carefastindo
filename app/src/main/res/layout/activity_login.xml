@@ -135,7 +135,7 @@
         android:layout_marginBottom="24dp"
         android:layout_marginStart="16dp"
         android:layout_marginEnd="16dp"
-        android:text="© 2026 Jufry Siregar | Absensi Pegawai PT. Carefastindo Indonesia. All Rights Reserved."
+        android:text="© 2023 M. Juffri Siregar | Absensi Pegawai PT. Carefastindo Indonesia. All Rights Reserved."
         android:textColor="@color/text_secondary_light"
         android:textSize="9.5sp"
         android:maxLines="1"
