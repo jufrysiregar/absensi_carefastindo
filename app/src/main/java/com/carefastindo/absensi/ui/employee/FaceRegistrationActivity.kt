@@ -366,27 +366,26 @@ class FaceRegistrationActivity : AppCompatActivity() {
                         ?: throw IllegalStateException("Data wajah belum lengkap. Silakan ulangi registrasi.")
                 }
 
+                val finalEmbedding = faceVerificationHelper.averageEmbeddings(embeddings)
+                    ?: throw IllegalStateException("Data wajah tidak valid. Silakan ulangi registrasi.")
                 val photoUrl = uploadReferencePhoto(userId, faceBitmap)
-                
+
                 withContext(Dispatchers.IO) {
-                    try {
-                        SupabaseClient.db.from("user_faces").delete {
+                    val existingFaces = SupabaseClient.db.from("user_faces")
+                        .select { filter { eq("user_id", userId) } }
+                        .decodeList<UserFace>()
+                    val faceRecord = UserFace(
+                        userId = userId,
+                        faceVector = embeddingToJson(finalEmbedding),
+                        facePhotoUrl = photoUrl ?: existingFaces.firstOrNull()?.facePhotoUrl
+                    )
+
+                    if (existingFaces.isNotEmpty()) {
+                        SupabaseClient.db.from("user_faces").update(faceRecord) {
                             filter { eq("user_id", userId) }
                         }
-                    } catch (e: Exception) {}
-                }
-
-                val facesToInsert = embeddings.map { embedding ->
-                    val jsonArray = JSONArray()
-                    for (f in embedding) {
-                        jsonArray.put(f.toDouble())
-                    }
-                    UserFace(userId = userId, faceVector = jsonArray.toString(), facePhotoUrl = photoUrl)
-                }
-
-                withContext(Dispatchers.IO) {
-                    for (face in facesToInsert) {
-                        SupabaseClient.db.from("user_faces").insert(face)
+                    } else {
+                        SupabaseClient.db.from("user_faces").insert(faceRecord)
                     }
                 }
 
@@ -413,6 +412,14 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 }
             }
         }
+    }
+
+    private fun embeddingToJson(embedding: FloatArray): String {
+        val jsonArray = JSONArray()
+        for (value in embedding) {
+            jsonArray.put(value.toDouble())
+        }
+        return jsonArray.toString()
     }
 
     private suspend fun uploadReferencePhoto(userId: String, faceBitmap: Bitmap): String? {
