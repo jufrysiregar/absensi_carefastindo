@@ -94,7 +94,6 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 }
 
             val imageAnalyzer = ImageAnalysis.Builder()
-                .setTargetResolution(android.util.Size(480, 360)) // Resize kamera jadi kecil agar sangat ringan
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
