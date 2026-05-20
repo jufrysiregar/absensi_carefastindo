@@ -120,7 +120,7 @@ class EmployeeDashboardFragment : Fragment() {
                 Jabatan: ${user.role}
                 Shift: $shiftTypeStr
                 Jam Kerja: $jamMasuk - $jamPulang
-                Jam Istirahat: $jamIstirahat
+                Jam Istirahat: Kondisional (Sesuai arahan Team Leader)
             """.trimIndent()
 
             MaterialAlertDialogBuilder(requireContext())
@@ -272,10 +272,9 @@ class EmployeeDashboardFragment : Fragment() {
             btnCheckIn.isEnabled = allowedCheckIn
             btnCheckIn.alpha = if (allowedCheckIn) 1.0f else 0.5f
 
-            // Break Button
+            // Break Button (Conditional based on field situation/TL, so it can be clicked anytime after check in)
             val hasCheckedInButNotBreak = hasCheckedIn && att?.breakTime == null
-            val isBreakWindow = ShiftHelper.isBreakWindowActive(role, breakStart)
-            val allowedBreak = hasCheckedInButNotBreak && isBreakWindow
+            val allowedBreak = hasCheckedInButNotBreak
             
             btnBreak.isEnabled = allowedBreak
             btnBreak.alpha = if (allowedBreak) 1.0f else 0.5f
