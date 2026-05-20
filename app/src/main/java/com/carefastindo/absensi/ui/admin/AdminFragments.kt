@@ -793,6 +793,7 @@ class TabEmployeeCrudFragment : Fragment() {
 
     private fun showAddEmployeeDialog() {
         val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_add_employee, null)
+        val edtEmployeeCode = dialogView.findViewById<EditText>(R.id.edtEmployeeCode)
         val edtName = dialogView.findViewById<EditText>(R.id.edtName)
         val edtEmail = dialogView.findViewById<EditText>(R.id.edtEmail)
         val edtPassword = dialogView.findViewById<EditText>(R.id.edtPassword)
@@ -822,22 +823,28 @@ class TabEmployeeCrudFragment : Fragment() {
             .setView(dialogView)
             .setNegativeButton("Batal", null)
             .setPositiveButton("Simpan") { _, _ ->
+                val employeeCode = edtEmployeeCode.text.toString().trim()
                 val name = edtName.text.toString().trim()
                 val email = edtEmail.text.toString().trim()
                 val password = edtPassword.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
                 val shift = if (role == "SPV") null else spinShift.selectedItem.toString()
 
-                if (name.isEmpty() || email.isEmpty() || password.isEmpty()) {
+                if (employeeCode.isEmpty() || name.isEmpty() || email.isEmpty() || password.isEmpty()) {
                     Toast.makeText(context, "Mohon lengkapi semua bidang!", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
+                
+                if (employeeCode.length > 6) {
+                    Toast.makeText(context, "ID Pegawai maksimal 6 angka!", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
 
-                saveNewEmployee(name, email, password, role, shift)
+                saveNewEmployee(employeeCode, name, email, password, role, shift)
             }.show()
     }
 
-    private fun saveNewEmployee(name: String, email: String, password: String, role: String, shift: String?) {
+    private fun saveNewEmployee(employeeCode: String, name: String, email: String, password: String, role: String, shift: String?) {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -850,9 +857,6 @@ class TabEmployeeCrudFragment : Fragment() {
                 }
                 val userId = response?.id ?: throw Exception("Gagal mendapatkan User ID dari Auth")
 
-                // 2. Generate unique 6-digit code
-                val uniqueCode = EmployeeHelper.generateUniqueEmployeeCode()
-
                 // 3. Create entry in users table
                 val newUser = User(
                     id = userId,
@@ -862,7 +866,7 @@ class TabEmployeeCrudFragment : Fragment() {
                     shiftType = shift,
                     position = null,
                     isActive = true,
-                    employeeCode = uniqueCode
+                    employeeCode = employeeCode
                 )
 
                 withContext(Dispatchers.IO) {
@@ -881,6 +885,7 @@ class TabEmployeeCrudFragment : Fragment() {
 
     private fun showEditEmployeeDialog(user: User) {
         val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_add_employee, null)
+        val edtEmployeeCode = dialogView.findViewById<EditText>(R.id.edtEmployeeCode)
         val edtName = dialogView.findViewById<EditText>(R.id.edtName)
         val edtEmail = dialogView.findViewById<EditText>(R.id.edtEmail)
         val edtPassword = dialogView.findViewById<EditText>(R.id.edtPassword)
@@ -888,6 +893,7 @@ class TabEmployeeCrudFragment : Fragment() {
         val spinShift = dialogView.findViewById<Spinner>(R.id.spinShift)
 
         // Populate old data
+        edtEmployeeCode.setText(user.employeeCode ?: "")
         edtName.setText(user.name)
         edtEmail.setText(user.email)
         edtEmail.isEnabled = false // Email cannot be modified
@@ -917,20 +923,26 @@ class TabEmployeeCrudFragment : Fragment() {
             .setView(dialogView)
             .setNegativeButton("Batal", null)
             .setPositiveButton("Simpan") { _, _ ->
+                val employeeCode = edtEmployeeCode.text.toString().trim()
                 val name = edtName.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
                 val shift = if (role == "SPV") null else spinShift.selectedItem.toString()
 
-                if (name.isEmpty()) {
-                    Toast.makeText(context, "Nama wajib diisi!", Toast.LENGTH_SHORT).show()
+                if (employeeCode.isEmpty() || name.isEmpty()) {
+                    Toast.makeText(context, "ID Pegawai dan Nama wajib diisi!", Toast.LENGTH_SHORT).show()
+                    return@setPositiveButton
+                }
+                
+                if (employeeCode.length > 6) {
+                    Toast.makeText(context, "ID Pegawai maksimal 6 angka!", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 
-                updateEmployeeProfile(user.id, name, role, shift)
+                updateEmployeeProfile(user.id, employeeCode, name, role, shift)
             }.show()
     }
 
-    private fun updateEmployeeProfile(userId: String, name: String, role: String, shift: String?) {
+    private fun updateEmployeeProfile(userId: String, employeeCode: String, name: String, role: String, shift: String?) {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -938,6 +950,7 @@ class TabEmployeeCrudFragment : Fragment() {
                     SupabaseClient.db.from("users")
                         .update(
                             {
+                                set("employee_code", employeeCode)
                                 set("name", name)
                                 set("role", role)
                                 set("shift_type", shift)
