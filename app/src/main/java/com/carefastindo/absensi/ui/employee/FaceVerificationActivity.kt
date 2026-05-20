@@ -195,13 +195,19 @@ class FaceVerificationActivity : AppCompatActivity() {
                                         if (sim > maxSimilarity) maxSimilarity = sim
                                     }
 
-                                    if (maxSimilarity > 0.8f) {
+                                    Log.d("FaceVerification", "Max Similarity: $maxSimilarity")
+
+                                    runOnUiThread {
+                                        txtInstruction.text = "Mencocokkan wajah... (${"%.0f".format(maxSimilarity * 100)}%)"
+                                    }
+
+                                    if (maxSimilarity > 0.65f) {
                                         // Wajah Cocok
                                         uploadSelfieAndFinish(faceBitmap)
                                     } else {
                                         // Wajah Tidak Cocok
                                         runOnUiThread {
-                                            txtInstruction.text = "Verifikasi wajah gagal (Akurasi: ${"%.2f".format(maxSimilarity)}). Pastikan wajah Anda terlihat jelas."
+                                            txtInstruction.text = "Wajah belum cocok (${"%.0f".format(maxSimilarity * 100)}%). Pastikan wajah Anda pas di dalam kotak & pencahayaan cukup."
                                         }
                                         isProcessing = false
                                     }
@@ -221,8 +227,8 @@ class FaceVerificationActivity : AppCompatActivity() {
                         }
                     }
                 }
-                .addOnFailureListener {
-                    // error
+                .addOnFailureListener { e ->
+                    Log.e("FaceVerification", "Gagal deteksi wajah: ${e.message}", e)
                 }
                 .addOnCompleteListener {
                     imageProxy.close()

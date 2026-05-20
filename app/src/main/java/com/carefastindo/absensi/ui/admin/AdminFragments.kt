@@ -864,7 +864,7 @@ class TabEmployeeCrudFragment : Fragment() {
                     name = name,
                     role = role,
                     shiftType = shift,
-                    position = null,
+                    position = role, // Posisi Jabatan otomatis diambil dari Role yang dipilih
                     isActive = true,
                     employeeCode = employeeCode
                 )
@@ -954,6 +954,7 @@ class TabEmployeeCrudFragment : Fragment() {
                                 set("name", name)
                                 set("role", role)
                                 set("shift_type", shift)
+                                set("position", role) // Sinkronkan posisi jabatan dengan role yang dipilih
                             }
                         ) {
                             filter { eq("id", userId) }
