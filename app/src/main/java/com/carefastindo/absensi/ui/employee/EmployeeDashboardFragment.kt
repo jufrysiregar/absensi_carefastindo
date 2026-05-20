@@ -324,7 +324,12 @@ class EmployeeDashboardFragment : Fragment() {
     }
 
     private fun startPresensiFlow(type: String) {
-        // Step 1: Scan QR Code
+        if (type != "check_in") {
+            checkLocationAndExecute(type)
+            return
+        }
+
+        // QR Code is only required for check-in. Break and check-out continue with GPS + face verification.
         val options = GmsBarcodeScannerOptions.Builder()
             .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
             .build()
