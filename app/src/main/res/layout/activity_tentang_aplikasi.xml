@@ -426,12 +426,6 @@
                         android:textSize="16sp"
                         android:textStyle="bold"
                         android:layout_marginTop="24dp"
-                        android:layout_marginBottom="12dp" />
-
-                    <View
-                        android:layout_width="match_parent"
-                        android:layout_height="1dp"
-                        android:background="#E5E7EB"
                         android:layout_marginBottom="16dp" />
 
                     <LinearLayout
@@ -443,88 +437,140 @@
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="8dp">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="•"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="14sp"
-                                android:layout_marginEnd="8dp" />
+                            android:orientation="horizontal">
+                            <RelativeLayout
+                                android:layout_width="24dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginEnd="12dp">
+                                <View
+                                    android:layout_width="1dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_centerHorizontal="true"
+                                    android:background="#3B82F6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="●"
+                                    android:textColor="#000000"
+                                    android:textSize="12sp"
+                                    android:layout_centerHorizontal="true"
+                                    android:layout_marginTop="2dp"
+                                    android:background="@color/surface_light" />
+                            </RelativeLayout>
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="22 Nov 2022 – 13 Feb 2023: Acc Judul &amp; Acc Proposal Skripsi."
                                 android:textColor="@color/text_primary_light"
-                                android:textSize="13sp" />
+                                android:textSize="13sp"
+                                android:layout_marginBottom="16dp"
+                                android:lineSpacingMultiplier="1.2" />
                         </LinearLayout>
 
                         <!-- Item 2 -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="8dp">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="•"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="14sp"
-                                android:layout_marginEnd="8dp" />
+                            android:orientation="horizontal">
+                            <RelativeLayout
+                                android:layout_width="24dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginEnd="12dp">
+                                <View
+                                    android:layout_width="1dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_centerHorizontal="true"
+                                    android:background="#3B82F6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="●"
+                                    android:textColor="#000000"
+                                    android:textSize="12sp"
+                                    android:layout_centerHorizontal="true"
+                                    android:layout_marginTop="2dp"
+                                    android:background="@color/surface_light" />
+                            </RelativeLayout>
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="01 Agu 2023: Revisi judul dan implementasi fitur keamanan aplikasi."
                                 android:textColor="@color/text_primary_light"
-                                android:textSize="13sp" />
+                                android:textSize="13sp"
+                                android:layout_marginBottom="16dp"
+                                android:lineSpacingMultiplier="1.2" />
                         </LinearLayout>
 
                         <!-- Item 3 -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="8dp">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="•"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="14sp"
-                                android:layout_marginEnd="8dp" />
+                            android:orientation="horizontal">
+                            <RelativeLayout
+                                android:layout_width="24dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginEnd="12dp">
+                                <View
+                                    android:layout_width="1dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_centerHorizontal="true"
+                                    android:background="#3B82F6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="●"
+                                    android:textColor="#000000"
+                                    android:textSize="12sp"
+                                    android:layout_centerHorizontal="true"
+                                    android:layout_marginTop="2dp"
+                                    android:background="@color/surface_light" />
+                            </RelativeLayout>
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="07 Sep 2023: Demo / Pemaparan aplikasi."
                                 android:textColor="@color/text_primary_light"
-                                android:textSize="13sp" />
+                                android:textSize="13sp"
+                                android:layout_marginBottom="16dp"
+                                android:lineSpacingMultiplier="1.2" />
                         </LinearLayout>
 
                         <!-- Item 4 -->
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:orientation="horizontal"
-                            android:layout_marginBottom="8dp">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="•"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="14sp"
-                                android:layout_marginEnd="8dp" />
+                            android:orientation="horizontal">
+                            <RelativeLayout
+                                android:layout_width="24dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginEnd="12dp">
+                                <View
+                                    android:layout_width="1dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_centerHorizontal="true"
+                                    android:background="#3B82F6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="●"
+                                    android:textColor="#000000"
+                                    android:textSize="12sp"
+                                    android:layout_centerHorizontal="true"
+                                    android:layout_marginTop="2dp"
+                                    android:background="@color/surface_light" />
+                            </RelativeLayout>
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="11 Des 2023: Presentasi aplikasi dan Sidang Skripsi."
                                 android:textColor="@color/text_primary_light"
-                                android:textSize="13sp" />
+                                android:textSize="13sp"
+                                android:layout_marginBottom="16dp"
+                                android:lineSpacingMultiplier="1.2" />
                         </LinearLayout>
 
                         <!-- Item 5 -->
@@ -532,20 +578,34 @@
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:orientation="horizontal">
-                            <TextView
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="•"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="14sp"
-                                android:layout_marginEnd="8dp" />
+                            <RelativeLayout
+                                android:layout_width="24dp"
+                                android:layout_height="match_parent"
+                                android:layout_marginEnd="12dp">
+                                <View
+                                    android:layout_width="1dp"
+                                    android:layout_height="match_parent"
+                                    android:layout_centerHorizontal="true"
+                                    android:background="#3B82F6" />
+                                <TextView
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="●"
+                                    android:textColor="#000000"
+                                    android:textSize="12sp"
+                                    android:layout_centerHorizontal="true"
+                                    android:layout_marginTop="2dp"
+                                    android:background="@color/surface_light" />
+                            </RelativeLayout>
                             <TextView
                                 android:layout_width="0dp"
                                 android:layout_weight="1"
                                 android:layout_height="wrap_content"
                                 android:text="18 Mei 2026 – 21 Mei 2026: Finalisasi / Penyempurnaan sistem [Selesai]."
                                 android:textColor="@color/text_primary_light"
-                                android:textSize="13sp" />
+                                android:textSize="13sp"
+                                android:layout_marginBottom="4dp"
+                                android:lineSpacingMultiplier="1.2" />
                         </LinearLayout>
                     </LinearLayout>
 
