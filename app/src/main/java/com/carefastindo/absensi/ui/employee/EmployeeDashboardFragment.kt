@@ -105,10 +105,31 @@ class EmployeeDashboardFragment : Fragment() {
             }
         }
 
-        // Action buttons
         val btnCheckIn = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnCheckIn)
         val btnBreak = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnBreak)
         val btnCheckOut = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnCheckOut)
+        val btnInfoJadwal = view?.findViewById<android.widget.ImageView>(R.id.btnInfoJadwal)
+
+        btnInfoJadwal?.setOnClickListener {
+            val user = viewModel.uiState.value.user ?: return@setOnClickListener
+            val (jamMasuk, jamPulang) = ShiftHelper.getShiftTimes(user.role, user.shiftType)
+            val jamIstirahat = ShiftHelper.getDefaultBreakStart(user.shiftType)
+            val shiftTypeStr = user.shiftType?.capitalize() ?: "Default"
+            
+            val infoText = """
+                Jabatan: ${user.role}
+                Shift: $shiftTypeStr
+                Jam Kerja: $jamMasuk - $jamPulang
+                Jam Istirahat: $jamIstirahat
+            """.trimIndent()
+
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle("Informasi Jadwal")
+                .setMessage(infoText)
+                .setCancelable(false)
+                .setPositiveButton("TUTUP", null)
+                .show()
+        }
 
         btnCheckIn?.setOnClickListener {
             if (isOffToday && !hasEmergencyAssignmentToday) {

@@ -325,14 +325,32 @@
                     android:orientation="vertical"
                     android:padding="20dp">
 
-                    <TextView
-                        android:layout_width="wrap_content"
+                    <LinearLayout
+                        android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:text="TINDAKAN PRESENSI"
-                        android:textColor="@color/text_primary_light"
-                        android:textStyle="bold"
-                        android:textSize="13sp"
-                        android:layout_marginBottom="16dp" />
+                        android:orientation="horizontal"
+                        android:gravity="center_vertical"
+                        android:layout_marginBottom="16dp">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="TINDAKAN PRESENSI"
+                            android:textColor="@color/text_primary_light"
+                            android:textStyle="bold"
+                            android:textSize="13sp" />
+
+                        <ImageView
+                            android:id="@+id/btnInfoJadwal"
+                            android:layout_width="24dp"
+                            android:layout_height="24dp"
+                            android:src="@android:drawable/ic_dialog_info"
+                            app:tint="#000000"
+                            android:background="?attr/selectableItemBackgroundBorderless"
+                            android:clickable="true"
+                            android:focusable="true" />
+                    </LinearLayout>
 
                     <!-- Absen Masuk Button (Green) -->
                     <com.google.android.material.button.MaterialButton
