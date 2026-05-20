@@ -240,7 +240,9 @@ class FaceVerificationActivity : AppCompatActivity() {
                 val photoPath = "$userId/${timestamp}_selfie.jpg"
                 
                 withContext(Dispatchers.IO) {
-                    SupabaseClient.storage.from("attendance-selfies").upload(photoPath, byteArray, upsert = true)
+                    SupabaseClient.storage.from("attendance-selfies").upload(photoPath, byteArray) {
+                        upsert = true
+                    }
                 }
                 
                 val photoUrl = SupabaseClient.storage.from("attendance-selfies").publicUrl(photoPath)

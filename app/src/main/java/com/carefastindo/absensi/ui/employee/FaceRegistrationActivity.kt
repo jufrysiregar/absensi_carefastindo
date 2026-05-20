@@ -201,7 +201,9 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 val photoPath = "$userId/${timestamp}_face.jpg"
                 
                 withContext(Dispatchers.IO) {
-                    SupabaseClient.storage.from("face_photos").upload(photoPath, byteArray, upsert = true)
+                    SupabaseClient.storage.from("face_photos").upload(photoPath, byteArray) {
+                        upsert = true
+                    }
                 }
                 
                 val photoUrl = SupabaseClient.storage.from("face_photos").publicUrl(photoPath)

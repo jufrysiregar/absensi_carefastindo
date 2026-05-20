@@ -17,6 +17,7 @@ import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
 import io.github.jan.supabase.auth.auth
+import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
@@ -75,7 +76,7 @@ class ProfilFragment : Fragment() {
             try {
                 val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
                 val faces = withContext(Dispatchers.IO) {
-                    io.github.jan.supabase.postgrest.from("user_faces")
+                    SupabaseClient.db.from("user_faces")
                         .select { filter { eq("user_id", userId) } }
                         .data
                 }
