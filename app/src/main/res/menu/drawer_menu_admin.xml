@@ -17,11 +17,11 @@
         <item
             android:id="@+id/nav_admin_employee"
             android:icon="@android:drawable/ic_menu_info_details"
-            android:title="Manajemen Karyawan" />
+            android:title="Manajemen Pegawai" />
         <item
             android:id="@+id/nav_admin_off"
             android:icon="@android:drawable/ic_menu_day"
-            android:title="Jadwal Off Karyawan" />
+            android:title="Jadwal Off Pegawai" />
         <item
             android:id="@+id/nav_admin_emergency"
             android:icon="@android:drawable/ic_menu_edit"

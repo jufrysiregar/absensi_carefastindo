@@ -521,7 +521,7 @@ class TabLeaveRequestsFragment : Fragment() {
 }
 
 // ==========================================
-// 4. MANAJEMEN KARYAWAN FRAGMENT
+// 4. MANAJEMEN PEGAWAI FRAGMENT
 // ==========================================
 class TabEmployeeCrudFragment : Fragment() {
     private lateinit var recyclerViewEmployee: RecyclerView
@@ -571,7 +571,7 @@ class TabEmployeeCrudFragment : Fragment() {
                 }
 
             } catch (e: Exception) {
-                view?.let { Snackbar.make(it, "Gagal memuat karyawan: ${e.localizedMessage}", Snackbar.LENGTH_LONG).show() }
+                view?.let { Snackbar.make(it, "Gagal memuat pegawai: ${e.localizedMessage}", Snackbar.LENGTH_LONG).show() }
             } finally {
                 loadingOverlay.visibility = View.GONE
             }
@@ -583,12 +583,11 @@ class TabEmployeeCrudFragment : Fragment() {
         val edtName = dialogView.findViewById<EditText>(R.id.edtName)
         val edtEmail = dialogView.findViewById<EditText>(R.id.edtEmail)
         val edtPassword = dialogView.findViewById<EditText>(R.id.edtPassword)
-        val edtPosition = dialogView.findViewById<EditText>(R.id.edtPosition)
         val spinRole = dialogView.findViewById<Spinner>(R.id.spinRole)
         val spinShift = dialogView.findViewById<Spinner>(R.id.spinShift)
 
         // Dropdown setup
-        val roles = arrayOf("Pegawai", "Leader", "SPV")
+        val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "SPV")
         spinRole.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, roles)
 
         val shifts = arrayOf("pagi", "sore", "malam")
@@ -606,27 +605,26 @@ class TabEmployeeCrudFragment : Fragment() {
         }
 
         AlertDialog.Builder(requireContext())
-            .setTitle("Tambah Karyawan Baru")
+            .setTitle("Tambah Pegawai Baru")
             .setView(dialogView)
             .setNegativeButton("Batal", null)
             .setPositiveButton("Simpan") { _, _ ->
                 val name = edtName.text.toString().trim()
                 val email = edtEmail.text.toString().trim()
                 val password = edtPassword.text.toString().trim()
-                val position = edtPosition.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
                 val shift = if (role == "SPV") null else spinShift.selectedItem.toString()
 
-                if (name.isEmpty() || email.isEmpty() || password.isEmpty() || position.isEmpty()) {
+                if (name.isEmpty() || email.isEmpty() || password.isEmpty()) {
                     Toast.makeText(context, "Mohon lengkapi semua bidang!", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 
-                saveNewEmployee(name, email, password, role, shift, position)
+                saveNewEmployee(name, email, password, role, shift)
             }.show()
     }
 
-    private fun saveNewEmployee(name: String, email: String, password: String, role: String, shift: String?, position: String) {
+    private fun saveNewEmployee(name: String, email: String, password: String, role: String, shift: String?) {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -649,7 +647,7 @@ class TabEmployeeCrudFragment : Fragment() {
                     name = name,
                     role = role,
                     shiftType = shift,
-                    position = position,
+                    position = null,
                     isActive = true,
                     employeeCode = uniqueCode
                 )
@@ -658,10 +656,10 @@ class TabEmployeeCrudFragment : Fragment() {
                     SupabaseClient.db.from("users").insert(newUser)
                 }
 
-                Toast.makeText(context, "Karyawan berhasil didaftarkan!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Pegawai berhasil didaftarkan!", Toast.LENGTH_SHORT).show()
                 loadEmployees()
             } catch (e: Exception) {
-                Toast.makeText(context, "Gagal membuat karyawan: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Gagal membuat pegawai: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             } finally {
                 loadingOverlay.visibility = View.GONE
             }
@@ -673,7 +671,6 @@ class TabEmployeeCrudFragment : Fragment() {
         val edtName = dialogView.findViewById<EditText>(R.id.edtName)
         val edtEmail = dialogView.findViewById<EditText>(R.id.edtEmail)
         val edtPassword = dialogView.findViewById<EditText>(R.id.edtPassword)
-        val edtPosition = dialogView.findViewById<EditText>(R.id.edtPosition)
         val spinRole = dialogView.findViewById<Spinner>(R.id.spinRole)
         val spinShift = dialogView.findViewById<Spinner>(R.id.spinShift)
 
@@ -682,9 +679,8 @@ class TabEmployeeCrudFragment : Fragment() {
         edtEmail.setText(user.email)
         edtEmail.isEnabled = false // Email cannot be modified
         edtPassword.visibility = View.GONE // Password modified via Reset password button
-        edtPosition.setText(user.position)
 
-        val roles = arrayOf("Pegawai", "Leader", "SPV")
+        val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "SPV")
         spinRole.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, roles)
         spinRole.setSelection(roles.indexOf(user.role))
 
@@ -704,25 +700,24 @@ class TabEmployeeCrudFragment : Fragment() {
         }
 
         AlertDialog.Builder(requireContext())
-            .setTitle("Edit Karyawan")
+            .setTitle("Edit Pegawai")
             .setView(dialogView)
             .setNegativeButton("Batal", null)
             .setPositiveButton("Simpan") { _, _ ->
                 val name = edtName.text.toString().trim()
-                val position = edtPosition.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
                 val shift = if (role == "SPV") null else spinShift.selectedItem.toString()
 
-                if (name.isEmpty() || position.isEmpty()) {
-                    Toast.makeText(context, "Nama dan Posisi wajib diisi!", Toast.LENGTH_SHORT).show()
+                if (name.isEmpty()) {
+                    Toast.makeText(context, "Nama wajib diisi!", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 
-                updateEmployeeProfile(user.id, name, role, shift, position)
+                updateEmployeeProfile(user.id, name, role, shift)
             }.show()
     }
 
-    private fun updateEmployeeProfile(userId: String, name: String, role: String, shift: String?, position: String) {
+    private fun updateEmployeeProfile(userId: String, name: String, role: String, shift: String?) {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -733,13 +728,12 @@ class TabEmployeeCrudFragment : Fragment() {
                                 set("name", name)
                                 set("role", role)
                                 set("shift_type", shift)
-                                set("position", position)
                             }
                         ) {
                             filter { eq("id", userId) }
                         }
                 }
-                Toast.makeText(context, "Profil karyawan berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, "Profil pegawai berhasil diperbarui!", Toast.LENGTH_SHORT).show()
                 loadEmployees()
             } catch (e: Exception) {
                 Toast.makeText(context, "Gagal memperbarui profil: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
@@ -756,7 +750,7 @@ class TabEmployeeCrudFragment : Fragment() {
                 withContext(Dispatchers.IO) {
                     SupabaseClient.auth.resetPasswordForEmail(email)
                 }
-                Toast.makeText(context, "Tautan reset sandi telah dikirim ke email karyawan!", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "Tautan reset sandi telah dikirim ke email pegawai!", Toast.LENGTH_LONG).show()
             } catch (e: Exception) {
                 Toast.makeText(context, "Gagal mengirim tautan: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             } finally {
@@ -780,7 +774,7 @@ class TabEmployeeCrudFragment : Fragment() {
                             filter { eq("id", user.id) }
                         }
                 }
-                Toast.makeText(context, if (newStatus) "Karyawan diaktifkan kembali!" else "Karyawan berhasil dinonaktifkan!", Toast.LENGTH_SHORT).show()
+                Toast.makeText(context, if (newStatus) "Pegawai diaktifkan kembali!" else "Pegawai berhasil dinonaktifkan!", Toast.LENGTH_SHORT).show()
                 loadEmployees()
             } catch (e: Exception) {
                 Toast.makeText(context, "Gagal memperbarui status keaktifan: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
@@ -1724,7 +1718,7 @@ class TabSettingsFragment : Fragment() {
     private fun saveOfficeSettings() {
         val lat = edtLatitude.text.toString().toDoubleOrNull()
         val lng = edtLongitude.text.toString().toDoubleOrNull()
-        val radius = edtRadius.text.toString().toDoubleOrNull()
+        val radius = edtRadius.text.toString().toIntOrNull()
         val start = edtCheckInStart.text.toString().trim()
         val end = edtCheckInEnd.text.toString().trim()
 

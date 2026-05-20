@@ -4,7 +4,7 @@
     xmlns:tools="http://tools.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@drawable/loading_bg"
+    android:background="@drawable/logo"
     tools:context=".SplashActivity">
 
     <!-- Bottom Indicator (Spinning loader positioned dynamically below the pre-drawn center logo) -->

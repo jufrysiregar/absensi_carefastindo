@@ -10,9 +10,10 @@
         android:orientation="vertical">
 
         <TextView
+            android:id="@+id/txtSelectEmployeeLabel"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="Pilih Karyawan yang Ditugaskan"
+            android:text="Pilih Pegawai yang Ditugaskan"
             android:textColor="@color/text_secondary_light"
             android:textSize="12sp"
             android:layout_marginBottom="4dp" />
@@ -59,7 +60,7 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:text="Pilih Karyawan yang Digantikan (Ganti Off)"
+                android:text="Pilih Pegawai yang Digantikan (Ganti Off)"
                 android:textColor="@color/text_secondary_light"
                 android:textSize="12sp"
                 android:layout_marginBottom="4dp" />

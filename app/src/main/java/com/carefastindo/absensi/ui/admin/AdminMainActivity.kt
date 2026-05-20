@@ -56,10 +56,10 @@ class AdminMainActivity : AppCompatActivity() {
                     replaceFragment(TabLeaveRequestsFragment(), "Pengajuan Izin")
                 }
                 R.id.nav_admin_employee -> {
-                    replaceFragment(TabEmployeeCrudFragment(), "Manajemen Karyawan")
+                    replaceFragment(TabEmployeeCrudFragment(), "Manajemen Pegawai")
                 }
                 R.id.nav_admin_off -> {
-                    replaceFragment(TabOffSchedulesFragment(), "Jadwal Off Karyawan")
+                    replaceFragment(TabOffSchedulesFragment(), "Jadwal Off Pegawai")
                 }
                 R.id.nav_admin_emergency -> {
                     replaceFragment(TabEmergencyFragment(), "Darurat & Lembur")

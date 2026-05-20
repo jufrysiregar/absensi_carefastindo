@@ -38,30 +38,31 @@
                         android:id="@+id/btnMenu"
                         android:layout_width="48dp"
                         android:layout_height="48dp"
-                        android:src="@android:drawable/ic_menu_sort_by_size"
+                        android:layout_alignParentStart="true"
+                        android:layout_centerVertical="true"
+                        android:src="@drawable/ic_menu_custom"
                         android:background="?attr/selectableItemBackgroundBorderless"
                         android:contentDescription="Open menu"
                         android:tint="@color/text_primary_light" />
+
+                    <ImageView
+                        android:layout_width="100dp"
+                        android:layout_height="40dp"
+                        android:layout_toEndOf="@id/btnMenu"
+                        android:layout_centerVertical="true"
+                        android:layout_marginStart="8dp"
+                        android:src="@drawable/logo"
+                        android:scaleType="fitCenter" />
 
                     <TextView
                         android:id="@+id/txtToolbarTitle"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_toEndOf="@id/btnMenu"
-                        android:layout_centerVertical="true"
-                        android:layout_marginStart="16dp"
+                        android:layout_centerInParent="true"
                         android:text="Workspace Karyawan"
                         android:textColor="@color/text_primary_light"
                         android:textSize="18sp"
                         android:textStyle="bold" />
-
-                    <ImageView
-                        android:layout_width="140dp"
-                        android:layout_height="50dp"
-                        android:layout_alignParentEnd="true"
-                        android:layout_centerVertical="true"
-                        android:src="@drawable/logo"
-                        android:scaleType="fitCenter" />
                 </RelativeLayout>
             </LinearLayout>
         </androidx.cardview.widget.CardView>
@@ -85,6 +86,7 @@
         app:menu="@menu/drawer_menu_employee"
         app:itemIconTint="#1A1A1A"
         app:itemTextColor="@color/text_primary_light"
+        android:background="@android:color/white"
         app:itemBackground="@android:color/transparent" />
 
 </androidx.drawerlayout.widget.DrawerLayout>

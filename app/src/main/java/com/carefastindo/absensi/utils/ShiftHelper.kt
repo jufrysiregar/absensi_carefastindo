@@ -10,7 +10,12 @@ object ShiftHelper {
     // Roles
     const val ROLE_SPV = "SPV"
     const val ROLE_LEADER = "Leader"
-    const val ROLE_PEGAWAI = "Pegawai"
+    const val ROLE_CLEANER = "Cleaner"
+    const val ROLE_HOUSEKEEPING = "Housekeeping"
+    const val ROLE_GARDENER = "Gardener"
+    const val ROLE_GONDOLA = "Gondola"
+
+    val shiftRoles = listOf(ROLE_LEADER, ROLE_CLEANER, ROLE_HOUSEKEEPING, ROLE_GARDENER, ROLE_GONDOLA)
 
     // Shifts
     const val SHIFT_PAGI = "pagi"
@@ -18,19 +23,17 @@ object ShiftHelper {
     const val SHIFT_MALAM = "malam"
 
     // Shift Times (in HH:mm format)
-    val times = mapOf(
-        "SPV" to Pair("08:00", "17:00"),
-        "Leader_pagi" to Pair("07:00", "15:00"),
-        "Leader_sore" to Pair("15:00", "23:00"),
-        "Leader_malam" to Pair("23:00", "07:00"),
-        "Pegawai_pagi" to Pair("07:00", "15:00"),
-        "Pegawai_sore" to Pair("15:00", "23:00"),
-        "Pegawai_malam" to Pair("23:00", "07:00")
+    val shiftTimes = mapOf(
+        SHIFT_PAGI to Pair("07:00", "15:00"),
+        SHIFT_SORE to Pair("15:00", "23:00"),
+        SHIFT_MALAM to Pair("23:00", "07:00")
     )
 
     fun getShiftTimes(role: String, shiftType: String?): Pair<String, String> {
-        val key = if (role == ROLE_SPV) "SPV" else "${role}_${shiftType ?: SHIFT_PAGI}"
-        return times[key] ?: Pair("08:00", "17:00")
+        if (role in shiftRoles) {
+            return shiftTimes[shiftType ?: SHIFT_PAGI] ?: Pair("07:00", "15:00")
+        }
+        return Pair("08:00", "17:00")
     }
 
     fun getDefaultBreakStart(shiftType: String?): String {

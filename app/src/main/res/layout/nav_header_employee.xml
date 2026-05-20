@@ -18,7 +18,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Nama Karyawan"
+        android:text="Nama Pegawai"
         android:textAppearance="@style/TextAppearance.AppCompat.Body2"
         android:textColor="@color/text_primary_light"
         android:textSize="16sp"
@@ -28,7 +28,7 @@
         android:id="@+id/navHeaderEmail"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="karyawan@carefastindo.com"
+        android:text="pegawai@carefastindo.com"
         android:textColor="@color/text_secondary_light"
         android:textSize="13sp" />
 

@@ -11,7 +11,7 @@
     <View
         android:id="@+id/topBanner"
         android:layout_width="match_parent"
-        android:layout_height="280dp"
+        android:layout_height="220dp"
         android:background="@color/white"
         app:layout_constraintTop_toTopOf="parent" />
 
@@ -19,7 +19,7 @@
          android:id="@+id/loginLogo"
          android:layout_width="160dp"
          android:layout_height="160dp"
-         android:layout_marginTop="56dp"
+         android:layout_marginTop="48dp"
          android:src="@drawable/logo"
          app:layout_constraintEnd_toEndOf="parent"
          app:layout_constraintStart_toStartOf="parent"
@@ -32,7 +32,7 @@
         android:layout_height="wrap_content"
         android:layout_marginStart="24dp"
         android:layout_marginEnd="24dp"
-        android:layout_marginTop="24dp"
+        android:layout_marginTop="16dp"
         app:cardCornerRadius="20dp"
         app:cardElevation="8dp"
         app:cardBackgroundColor="@color/surface_light"

@@ -360,7 +360,7 @@ class EmployeeDashboardFragment : Fragment() {
     }
 
     private fun verifyGeofencingAndSave(type: String, lat: Double, lng: Double) {
-        val config = companyConfig ?: CompanyConfig(officeLat = 3.5952, officeLng = 98.6722, radius = 100.0) // default fallback
+        val config = companyConfig ?: CompanyConfig(officeLat = 3.5952, officeLng = 98.6722, radius = 100) // default fallback
         
         val results = FloatArray(1)
         Location.distanceBetween(lat, lng, config.officeLat, config.officeLng, results)
@@ -369,7 +369,7 @@ class EmployeeDashboardFragment : Fragment() {
         if (distance > config.radius) {
             MaterialAlertDialogBuilder(requireContext())
                 .setTitle("Di Luar Area")
-                .setMessage("Anda berada di luar area absensi. Jarak Anda ke kantor adalah ${distance.toInt()} meter (Maksimal radius ${config.radius.toInt()} meter).")
+                .setMessage("Anda berada di luar area absensi. Jarak Anda ke kantor adalah ${distance.toInt()} meter (Maksimal radius ${config.radius} meter).")
                 .setPositiveButton("OK", null)
                 .show()
             return
@@ -439,7 +439,7 @@ class EmployeeDashboardFragment : Fragment() {
                             if (newLatenessCount >= 3) {
                                 val adminNotif = Notification(
                                     userId = "superadmin", // broadcast to admin
-                                    message = "Karyawan ${user.name} (${user.employeeCode}) telah terlambat 3 kali bulan ini."
+                                    message = "Pegawai ${user.name} (${user.employeeCode}) telah terlambat 3 kali bulan ini."
                                 )
                                 withContext(Dispatchers.IO) {
                                     SupabaseClient.db.from("notifications").insert(adminNotif)
