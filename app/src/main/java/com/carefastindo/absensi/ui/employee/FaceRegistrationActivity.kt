@@ -51,6 +51,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var faceVerificationHelper: FaceVerificationHelper
+    private lateinit var faceDetector: com.google.mlkit.vision.face.FaceDetector
 
     private var isProcessing = false
     private var isRegistered = false
@@ -59,6 +60,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
     enum class RegistrationStep { FRONT, LEFT, RIGHT, DONE }
     private var currentStep = RegistrationStep.FRONT
     private val capturedEmbeddings = mutableMapOf<RegistrationStep, FloatArray>()
+    private val tempStepEmbeddings = mutableListOf<FloatArray>()
     private var isDelaying = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -71,6 +73,13 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
         faceVerificationHelper = FaceVerificationHelper(this)
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        val detectorOptions = FaceDetectorOptions.Builder()
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+            .setLandmarkMode(FaceDetectorOptions.LANDMARK_MODE_ALL)
+            .setClassificationMode(FaceDetectorOptions.CLASSIFICATION_MODE_ALL)
+            .build()
+        faceDetector = FaceDetection.getClient(detectorOptions)
 
         if (allPermissionsGranted()) {
             startCamera()
@@ -124,66 +133,151 @@ class FaceRegistrationActivity : AppCompatActivity() {
         }
 
         frameCounter++
-        // Frame skipping: Hanya proses 1 dari 5 frame agar tidak berat/ngelag
-        if (frameCounter % 5 != 0) {
+        // Frame skipping: Cukup ambil 1 frame untuk diproses setiap 10 frame
+        if (frameCounter % 10 != 0) {
             imageProxy.close()
             return
         }
 
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            val options = FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST) // Gunakan FAST untuk registrasi agar sangat cepat
-                .build()
-            val detector = FaceDetection.getClient(options)
+        // 1. Optimasi Gambar (Resize ke maks 480x360 sebelum deteksi & encoding)
+        val bitmap = imageProxyToBitmap(imageProxy)
+        if (bitmap != null) {
+            // Resize terlebih dahulu sebelum rotasi untuk menghemat CPU & Memori
+            val maxDim = bitmap.width.coerceAtLeast(bitmap.height)
+            val resizedBitmap = if (maxDim > 480) {
+                val scale = 480f / maxDim
+                val scaled = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                bitmap.recycle()
+                scaled
+            } else {
+                bitmap
+            }
 
-            detector.process(image)
+            val rotatedBitmap = rotateBitmap(resizedBitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
+            if (rotatedBitmap != resizedBitmap) {
+                resizedBitmap.recycle()
+            }
+
+            val image = InputImage.fromBitmap(rotatedBitmap, 0) // Gambar sudah terputar!
+
+            faceDetector.process(image)
                 .addOnSuccessListener { faces ->
 
                     if (faces.isNotEmpty() && !isProcessing && !isDelaying && currentStep != RegistrationStep.DONE) {
-                        isProcessing = true
                         // Ambil wajah dengan ukuran paling besar (mengabaikan false positive di background)
                         val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } ?: faces[0]
                         val boundingBox = face.boundingBox
 
-                        // Extract face bitmap
-                        val bitmap = imageProxyToBitmap(imageProxy)
-                        if (bitmap != null) {
-                            val rotatedBitmap = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
-                            
-                            try {
-                                // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
-                                val marginX = (boundingBox.width() * 0.2f).toInt()
-                                val marginY = (boundingBox.height() * 0.2f).toInt()
-                                val left = (boundingBox.left - marginX).coerceAtLeast(0)
-                                val top = (boundingBox.top - marginY).coerceAtLeast(0)
-                                val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
-                                val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
-                                
-                                val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
-                                val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
+                        // 2. Validasi Ukuran Wajah (Minimal 18% dari lebar/tinggi frame)
+                        val frameMinDim = image.width.coerceAtMost(image.height)
+                        val faceMinDim = boundingBox.width().coerceAtMost(boundingBox.height())
+                        val minFaceSize = (frameMinDim * 0.18).toInt()
 
-                                if (embedding != null) {
-                                    capturedEmbeddings[currentStep] = embedding
-                                    moveToNextStep(faceBitmap)
+                        if (faceMinDim < minFaceSize) {
+                            runOnUiThread {
+                                txtInstruction.text = "Wajah terlalu jauh, mohon dekatkan ke kamera"
+                            }
+                            return@addOnSuccessListener
+                        }
+
+                        val stepProgressText = when (currentStep) {
+                            RegistrationStep.FRONT -> "Langkah 1 dari 3: Ambil wajah tampak depan"
+                            RegistrationStep.LEFT -> "Langkah 2 dari 3: Tolehkan wajah sedikit ke Kiri"
+                            RegistrationStep.RIGHT -> "Langkah 3 dari 3: Tolehkan wajah sedikit ke Kanan"
+                            else -> ""
+                        }
+
+                        // 3. Validasi Pose Wajah berdasarkan currentStep (headEulerAngleY)
+                        val headEulerAngleY = face.headEulerAngleY
+                        val isPoseValid = when (currentStep) {
+                            RegistrationStep.FRONT -> {
+                                if (headEulerAngleY < -12f || headEulerAngleY > 12f) {
+                                    runOnUiThread { txtInstruction.text = "$stepProgressText\n(posisi wajah miring, tatap lurus ke depan)" }
+                                    false
                                 } else {
-                                    isProcessing = false
+                                    true
                                 }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
+                            }
+                            RegistrationStep.LEFT -> {
+                                if (headEulerAngleY >= -12f) {
+                                    runOnUiThread { txtInstruction.text = stepProgressText }
+                                    false
+                                } else {
+                                    true
+                                }
+                            }
+                            RegistrationStep.RIGHT -> {
+                                if (headEulerAngleY <= 12f) {
+                                    runOnUiThread { txtInstruction.text = stepProgressText }
+                                    false
+                                } else {
+                                    true
+                                }
+                            }
+                            else -> false
+                        }
+
+                        if (!isPoseValid) {
+                            return@addOnSuccessListener
+                        }
+
+                        isProcessing = true
+                        
+                        try {
+                            // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
+                            val marginX = (boundingBox.width() * 0.2f).toInt()
+                            val marginY = (boundingBox.height() * 0.2f).toInt()
+                            val left = (boundingBox.left - marginX).coerceAtLeast(0)
+                            val top = (boundingBox.top - marginY).coerceAtLeast(0)
+                            val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
+                            val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
+                            
+                            val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
+                            val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
+
+                            if (embedding != null) {
+                                tempStepEmbeddings.add(embedding)
+                                val stepName = when (currentStep) {
+                                    RegistrationStep.FRONT -> "Depan"
+                                    RegistrationStep.LEFT -> "Kiri"
+                                    RegistrationStep.RIGHT -> "Kanan"
+                                    else -> ""
+                                }
+
+                                if (tempStepEmbeddings.size < 3) {
+                                    runOnUiThread {
+                                        txtInstruction.text = "$stepProgressText\n(Mengambil data wajah $stepName: ${tempStepEmbeddings.size}/3)..."
+                                    }
+                                    // Pacing: Beri jeda kecil agar frame selanjutnya bervariasi sedikit
+                                    lifecycleScope.launch {
+                                        kotlinx.coroutines.delay(100)
+                                        isProcessing = false
+                                    }
+                                } else {
+                                    val averaged = faceVerificationHelper.averageEmbeddings(tempStepEmbeddings)
+                                    if (averaged != null) {
+                                        capturedEmbeddings[currentStep] = averaged
+                                        tempStepEmbeddings.clear()
+                                        moveToNextStep(faceBitmap)
+                                    } else {
+                                        tempStepEmbeddings.clear()
+                                        isProcessing = false
+                                    }
+                                }
+                            } else {
                                 isProcessing = false
                             }
-                        } else {
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                             isProcessing = false
                         }
                     } else if (!isProcessing && !isDelaying) {
                         // instruction
                         runOnUiThread {
                             val msg = when(currentStep) {
-                                RegistrationStep.FRONT -> "Tatap layar lurus ke Depan"
-                                RegistrationStep.LEFT -> "Tolehkan wajah sedikit ke Kiri"
-                                RegistrationStep.RIGHT -> "Tolehkan wajah sedikit ke Kanan"
+                                RegistrationStep.FRONT -> "Langkah 1 dari 3: Ambil wajah tampak depan"
+                                RegistrationStep.LEFT -> "Langkah 2 dari 3: Tolehkan wajah sedikit ke Kiri"
+                                RegistrationStep.RIGHT -> "Langkah 3 dari 3: Tolehkan wajah sedikit ke Kanan"
                                 else -> ""
                             }
                             if (faces.isEmpty()) txtInstruction.text = "Tidak ada wajah terdeteksi\n$msg"
@@ -201,35 +295,48 @@ class FaceRegistrationActivity : AppCompatActivity() {
             imageProxy.close()
         }
     }
-
-    
+ 
     private fun moveToNextStep(lastBitmap: Bitmap) {
-        when (currentStep) {
-            RegistrationStep.FRONT -> {
-                currentStep = RegistrationStep.LEFT
-                isDelaying = true
-                runOnUiThread { txtInstruction.text = "Bagus! Sekarang tolehkan wajah sedikit ke Kiri" }
-                lifecycleScope.launch {
+        runOnUiThread {
+            progressBar.visibility = View.VISIBLE
+            txtInstruction.text = "Memproses wajah..."
+        }
+        lifecycleScope.launch {
+            // Beri jeda loading singkat agar user melihat proses pengolahan wajah (animasi loading)
+            kotlinx.coroutines.delay(1000)
+
+            when (currentStep) {
+                RegistrationStep.FRONT -> {
+                    currentStep = RegistrationStep.LEFT
+                    isDelaying = true
+                    runOnUiThread {
+                        progressBar.visibility = View.GONE
+                        txtInstruction.text = "Wajah depan berhasil direkam!\nLangkah 2 dari 3: Tolehkan wajah sedikit ke Kiri"
+                    }
                     kotlinx.coroutines.delay(2000)
                     isDelaying = false
                     isProcessing = false
                 }
-            }
-            RegistrationStep.LEFT -> {
-                currentStep = RegistrationStep.RIGHT
-                isDelaying = true
-                runOnUiThread { txtInstruction.text = "Bagus! Sekarang tolehkan wajah sedikit ke Kanan" }
-                lifecycleScope.launch {
+                RegistrationStep.LEFT -> {
+                    currentStep = RegistrationStep.RIGHT
+                    isDelaying = true
+                    runOnUiThread {
+                        progressBar.visibility = View.GONE
+                        txtInstruction.text = "Wajah kiri berhasil direkam!\nLangkah 3 dari 3: Tolehkan wajah sedikit ke Kanan"
+                    }
                     kotlinx.coroutines.delay(2000)
                     isDelaying = false
                     isProcessing = false
                 }
+                RegistrationStep.RIGHT -> {
+                    currentStep = RegistrationStep.DONE
+                    runOnUiThread {
+                        txtInstruction.text = "Wajah kanan berhasil direkam!\nMenyimpan data wajah..."
+                    }
+                    registerFaces(lastBitmap)
+                }
+                RegistrationStep.DONE -> {}
             }
-            RegistrationStep.RIGHT -> {
-                currentStep = RegistrationStep.DONE
-                registerFaces(lastBitmap)
-            }
-            RegistrationStep.DONE -> {}
         }
     }
 
@@ -293,6 +400,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                     isProcessing = false
                     currentStep = RegistrationStep.FRONT
                     capturedEmbeddings.clear()
+                    tempStepEmbeddings.clear()
                     progressBar.visibility = View.GONE
                 }
             }
@@ -337,6 +445,11 @@ class FaceRegistrationActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         faceVerificationHelper.close()
+        try {
+            faceDetector.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     companion object {

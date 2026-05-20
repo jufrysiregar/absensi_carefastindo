@@ -52,9 +52,12 @@ class FaceVerificationActivity : AppCompatActivity() {
 
     private lateinit var cameraExecutor: ExecutorService
     private lateinit var faceVerificationHelper: FaceVerificationHelper
-
+    private lateinit var faceDetector: com.google.mlkit.vision.face.FaceDetector
+    
     private var isProcessing = false
     private var baseFaceVectors: List<FloatArray> = emptyList()
+    private var consecutiveMatchCount = 0
+    private var frameCounter = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -66,6 +69,11 @@ class FaceVerificationActivity : AppCompatActivity() {
 
         faceVerificationHelper = FaceVerificationHelper(this)
         cameraExecutor = Executors.newSingleThreadExecutor()
+
+        val detectorOptions = FaceDetectorOptions.Builder()
+            .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+            .build()
+        faceDetector = FaceDetection.getClient(detectorOptions)
 
         loadBaseFaceVector()
 
@@ -155,73 +163,109 @@ class FaceVerificationActivity : AppCompatActivity() {
             return
         }
 
-        val mediaImage = imageProxy.image
-        if (mediaImage != null) {
-            val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
-            val options = FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
-                .build()
-            val detector = FaceDetection.getClient(options)
+        frameCounter++
+        // Frame skipping: Hanya proses 1 dari 3 frame agar tidak berat/ngelag
+        if (frameCounter % 3 != 0) {
+            imageProxy.close()
+            return
+        }
 
-            detector.process(image)
+        val bitmap = imageProxyToBitmap(imageProxy)
+        if (bitmap != null) {
+            // Resize terlebih dahulu sebelum rotasi untuk menghemat CPU & Memori
+            val maxDim = bitmap.width.coerceAtLeast(bitmap.height)
+            val resizedBitmap = if (maxDim > 480) {
+                val scale = 480f / maxDim
+                val scaled = Bitmap.createScaledBitmap(bitmap, (bitmap.width * scale).toInt(), (bitmap.height * scale).toInt(), true)
+                bitmap.recycle()
+                scaled
+            } else {
+                bitmap
+            }
+
+            val rotatedBitmap = rotateBitmap(resizedBitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
+            if (rotatedBitmap != resizedBitmap) {
+                resizedBitmap.recycle()
+            }
+
+            val image = InputImage.fromBitmap(rotatedBitmap, 0) // Gambar sudah terputar!
+
+            faceDetector.process(image)
                 .addOnSuccessListener { faces ->
                     if (faces.isNotEmpty() && !isProcessing) {
-                        isProcessing = true
                         // Ambil wajah dengan ukuran paling besar (mengabaikan false positive di background)
                         val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } ?: faces[0]
                         val boundingBox = face.boundingBox
 
-                        // Extract face bitmap
-                        val bitmap = imageProxyToBitmap(imageProxy)
-                        if (bitmap != null) {
-                            val rotatedBitmap = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
+                        // 1. Validasi Ukuran Wajah (Minimal 18% dari lebar/tinggi frame)
+                        val frameMinDim = image.width.coerceAtMost(image.height)
+                        val faceMinDim = boundingBox.width().coerceAtMost(boundingBox.height())
+                        val minFaceSize = (frameMinDim * 0.18).toInt()
+
+                        if (faceMinDim < minFaceSize) {
+                            consecutiveMatchCount = 0
+                            runOnUiThread {
+                                txtInstruction.text = "Wajah terlalu jauh, mohon dekatkan ke kamera"
+                            }
+                            return@addOnSuccessListener
+                        }
+
+                        isProcessing = true
+
+                        try {
+                            // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
+                            val marginX = (boundingBox.width() * 0.2f).toInt()
+                            val marginY = (boundingBox.height() * 0.2f).toInt()
+                            val left = (boundingBox.left - marginX).coerceAtLeast(0)
+                            val top = (boundingBox.top - marginY).coerceAtLeast(0)
+                            val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
+                            val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
                             
-                            try {
-                                // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
-                                val marginX = (boundingBox.width() * 0.2f).toInt()
-                                val marginY = (boundingBox.height() * 0.2f).toInt()
-                                val left = (boundingBox.left - marginX).coerceAtLeast(0)
-                                val top = (boundingBox.top - marginY).coerceAtLeast(0)
-                                val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
-                                val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
-                                
-                                val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
-                                val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
+                            val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
+                            val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
 
-                                if (embedding != null && baseFaceVectors.isNotEmpty()) {
-                                    var maxSimilarity = -1f
-                                    for (baseVector in baseFaceVectors) {
-                                        val sim = faceVerificationHelper.cosineSimilarity(embedding, baseVector)
-                                        if (sim > maxSimilarity) maxSimilarity = sim
-                                    }
+                            if (embedding != null && baseFaceVectors.isNotEmpty()) {
+                                var maxSimilarity = -1f
+                                for (baseVector in baseFaceVectors) {
+                                    val sim = faceVerificationHelper.cosineSimilarity(embedding, baseVector)
+                                    if (sim > maxSimilarity) maxSimilarity = sim
+                                }
 
-                                    Log.d("FaceVerification", "Max Similarity: $maxSimilarity")
+                                Log.d("FaceVerification", "Max Similarity: $maxSimilarity")
 
-                                    runOnUiThread {
-                                        txtInstruction.text = "Mencocokkan wajah... (${"%.0f".format(maxSimilarity * 100)}%)"
-                                    }
+                                val similarityPercent = "%.0f".format(maxSimilarity * 100)
 
-                                    if (maxSimilarity > 0.65f) {
-                                        // Wajah Cocok
+                                if (maxSimilarity > 0.55f) {
+                                    consecutiveMatchCount++
+                                    if (consecutiveMatchCount >= 3) {
+                                        // Wajah Cocok & Konsisten
                                         uploadSelfieAndFinish(faceBitmap)
                                     } else {
-                                        // Wajah Tidak Cocok
                                         runOnUiThread {
-                                            txtInstruction.text = "Wajah belum cocok (${"%.0f".format(maxSimilarity * 100)}%). Pastikan wajah Anda pas di dalam kotak & pencahayaan cukup."
+                                            txtInstruction.text = "Mencocokkan wajah... (${consecutiveMatchCount}/3) - $similarityPercent%"
                                         }
+                                        faceBitmap.recycle()
                                         isProcessing = false
                                     }
                                 } else {
+                                    // Wajah Tidak Cocok
+                                    consecutiveMatchCount = 0
+                                    runOnUiThread {
+                                        txtInstruction.text = "Wajah belum cocok ($similarityPercent%). Pastikan wajah Anda pas di dalam kotak & pencahayaan cukup."
+                                    }
+                                    faceBitmap.recycle()
                                     isProcessing = false
                                 }
-                            } catch (e: Exception) {
-                                e.printStackTrace()
+                            } else {
+                                faceBitmap.recycle()
                                 isProcessing = false
                             }
-                        } else {
+                        } catch (e: Exception) {
+                            e.printStackTrace()
                             isProcessing = false
                         }
                     } else if (!isProcessing) {
+                        consecutiveMatchCount = 0
                         runOnUiThread {
                             if (faces.isEmpty()) txtInstruction.text = "Tidak ada wajah terdeteksi"
                         }
@@ -320,6 +364,11 @@ class FaceVerificationActivity : AppCompatActivity() {
         super.onDestroy()
         cameraExecutor.shutdown()
         faceVerificationHelper.close()
+        try {
+            faceDetector.close()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     companion object {

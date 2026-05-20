@@ -84,7 +84,23 @@ class FaceVerificationHelper(context: Context) {
         }
         return if (normA == 0f || normB == 0f) 0f else (dotProduct / (sqrt(normA.toDouble()) * sqrt(normB.toDouble()))).toFloat()
     }
-    
+
+    fun averageEmbeddings(embeddingsList: List<FloatArray>): FloatArray? {
+        if (embeddingsList.isEmpty()) return null
+        val numFeatures = embeddingsList[0].size
+        val average = FloatArray(numFeatures)
+        for (embeddings in embeddingsList) {
+            if (embeddings.size != numFeatures) return null
+            for (i in 0 until numFeatures) {
+                average[i] += embeddings[i]
+            }
+        }
+        for (i in 0 until numFeatures) {
+            average[i] /= embeddingsList.size
+        }
+        return l2Normalize(average)
+    }
+
     fun close() {
         interpreter?.close()
         interpreter = null

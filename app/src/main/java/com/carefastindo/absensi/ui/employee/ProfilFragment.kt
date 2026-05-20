@@ -122,7 +122,7 @@ class ProfilFragment : Fragment() {
                 txtEmployeeCode.text = u.employeeCode ?: "--"
 
                 txtShift.text = u.shiftType?.capitalize() ?: "Default"
-                txtPosition.text = u.position
+                txtPosition.text = u.position ?: u.role?.capitalize() ?: "--"
                 txtLatenessCount.text = "${u.latenessCount} Kali"
             }
         }
