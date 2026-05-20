@@ -164,17 +164,26 @@ class TabDashboardFragment : Fragment() {
 class TabRekapFragment : Fragment() {
     private lateinit var btnSelectDate: Button
     private lateinit var btnExportCsv: Button
+    private lateinit var spinFilterShift: Spinner
+    private lateinit var btnHadirkanSemua: Button
+    private lateinit var btnSimpanRekapan: Button
     private lateinit var recyclerViewRekap: RecyclerView
     private lateinit var txtNoData: TextView
     private lateinit var loadingOverlay: FrameLayout
+    
     private var selectedDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    private var selectedShift = "Semua"
     private var rekapItems = mutableListOf<RekapItem>()
+    private var allEmployeesCache = listOf<User>()
 
     data class RekapItem(
         val user: User,
-        val status: String,
-        val checkInTime: String?,
-        val checkOutTime: String?
+        var status: String,
+        var checkInTime: String?,
+        var checkOutTime: String?,
+        var note: String? = null,
+        var attendanceId: String? = null,
+        var isEdited: Boolean = false
     )
 
     override fun onCreateView(
@@ -184,14 +193,31 @@ class TabRekapFragment : Fragment() {
         val view = inflater.inflate(R.layout.fragment_rekap_absensi, container, false)
         btnSelectDate = view.findViewById(R.id.btnSelectDate)
         btnExportCsv = view.findViewById(R.id.btnExportCsv)
+        spinFilterShift = view.findViewById(R.id.spinFilterShift)
+        btnHadirkanSemua = view.findViewById(R.id.btnHadirkanSemua)
+        btnSimpanRekapan = view.findViewById(R.id.btnSimpanRekapan)
         recyclerViewRekap = view.findViewById(R.id.recyclerViewRekap)
         txtNoData = view.findViewById(R.id.txtNoData)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
         recyclerViewRekap.layoutManager = LinearLayoutManager(context)
 
+        // Setup Spinner Shift
+        val shifts = arrayOf("Semua", "Pagi", "Sore", "Malam", "Non-Shift (SPV)")
+        spinFilterShift.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, shifts)
+        spinFilterShift.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
+                selectedShift = shifts[pos]
+                applyFilterAndDisplay()
+            }
+            override fun onNothingSelected(p0: AdapterView<*>?) {}
+        }
+
         btnSelectDate.setOnClickListener { showDatePicker() }
         btnExportCsv.setOnClickListener { exportToCSV() }
+        
+        btnHadirkanSemua.setOnClickListener { hadirkanSemuaPegawai() }
+        btnSimpanRekapan.setOnClickListener { simpanRekapanKeDatabase() }
 
         updateDateButtonLabel()
         loadRekapData()
@@ -218,7 +244,7 @@ class TabRekapFragment : Fragment() {
         lifecycleScope.launch {
             try {
                 // 1. Fetch active employees (excluding superadmin)
-                val employees = withContext(Dispatchers.IO) {
+                allEmployeesCache = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("users")
                         .select { filter { eq("is_active", true) } }
                         .decodeList<User>()
@@ -246,10 +272,12 @@ class TabRekapFragment : Fragment() {
                 }
 
                 rekapItems.clear()
-                for (emp in employees) {
+                for (emp in allEmployeesCache) {
                     var status = "TIDAK ABSEN"
                     var checkIn: String? = null
                     var checkOut: String? = null
+                    var note: String? = null
+                    var attendanceId: String? = null
 
                     // Step A: Check off schedule
                     val offSched = offList.find { it.userId == emp.id }
@@ -267,24 +295,195 @@ class TabRekapFragment : Fragment() {
                                 checkIn = att.checkInTime
                                 checkOut = att.checkOutTime
                                 status = att.status.uppercase()
+                                note = att.note
+                                attendanceId = att.id
                             }
                         }
                     }
 
-                    rekapItems.add(RekapItem(emp, status, checkIn, checkOut))
+                    rekapItems.add(RekapItem(emp, status, checkIn, checkOut, note, attendanceId, false))
                 }
 
-                if (rekapItems.isEmpty()) {
-                    txtNoData.visibility = View.VISIBLE
-                    recyclerViewRekap.visibility = View.GONE
-                } else {
-                    txtNoData.visibility = View.GONE
-                    recyclerViewRekap.visibility = View.VISIBLE
-                    recyclerViewRekap.adapter = RekapAdapter(rekapItems)
-                }
+                applyFilterAndDisplay()
 
             } catch (e: Exception) {
                 view?.let { Snackbar.make(it, "Gagal memuat rekap: ${e.localizedMessage}", Snackbar.LENGTH_LONG).show() }
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun applyFilterAndDisplay() {
+        val filteredList = rekapItems.filter { item ->
+            when (selectedShift) {
+                "Pagi" -> item.user.shiftType?.lowercase() == "pagi"
+                "Sore" -> item.user.shiftType?.lowercase() == "sore"
+                "Malam" -> item.user.shiftType?.lowercase() == "malam"
+                "Non-Shift (SPV)" -> item.user.role.equals("SPV", ignoreCase = true)
+                else -> true // Semua
+            }
+        }
+
+        if (filteredList.isEmpty()) {
+            txtNoData.visibility = View.VISIBLE
+            recyclerViewRekap.visibility = View.GONE
+        } else {
+            txtNoData.visibility = View.GONE
+            recyclerViewRekap.visibility = View.VISIBLE
+            recyclerViewRekap.adapter = RekapAdapter(filteredList)
+        }
+    }
+    
+    private fun hadirkanSemuaPegawai() {
+        val adapter = recyclerViewRekap.adapter as? RekapAdapter ?: return
+        val currentItems = adapter.getItems()
+        
+        for (item in currentItems) {
+            if (item.status != "HADIR" && item.status != "OFF" && item.status != "IZIN" && item.status != "SAKIT") {
+                item.status = "HADIR"
+                item.isEdited = true
+                item.note = "Dihadirkan Massal"
+                
+                // Set default times based on shift
+                if (item.user.role.equals("SPV", ignoreCase = true)) {
+                    item.checkInTime = "08:00:00"
+                    item.checkOutTime = "17:00:00"
+                } else {
+                    when (item.user.shiftType?.lowercase()) {
+                        "pagi" -> {
+                            item.checkInTime = "07:00:00"
+                            item.checkOutTime = "15:00:00"
+                        }
+                        "sore" -> {
+                            item.checkInTime = "15:00:00"
+                            item.checkOutTime = "23:00:00"
+                        }
+                        "malam" -> {
+                            item.checkInTime = "23:00:00"
+                            item.checkOutTime = "07:00:00"
+                        }
+                    }
+                }
+            }
+        }
+        adapter.notifyDataSetChanged()
+    }
+    
+    private fun showEditDialog(item: RekapItem, position: Int) {
+        val dialogView = LayoutInflater.from(context).inflate(R.layout.dialog_koreksi_absensi, null)
+        val txtName = dialogView.findViewById<TextView>(R.id.txtKoreksiName)
+        val txtDetails = dialogView.findViewById<TextView>(R.id.txtKoreksiDetails)
+        val spinStatus = dialogView.findViewById<Spinner>(R.id.spinKoreksiStatus)
+        val btnMasuk = dialogView.findViewById<Button>(R.id.btnKoreksiMasuk)
+        val btnPulang = dialogView.findViewById<Button>(R.id.btnKoreksiPulang)
+        val edtNote = dialogView.findViewById<EditText>(R.id.edtKoreksiNote)
+
+        txtName.text = item.user.name
+        txtDetails.text = "Shift: ${item.user.shiftType?.uppercase() ?: "NON-SHIFT"} | Posisi: ${item.user.role}"
+        
+        val statusList = arrayOf("HADIR", "TERLAMBAT", "TIDAK ABSEN", "IZIN", "SAKIT", "OFF")
+        spinStatus.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, statusList)
+        val currentStatusIdx = statusList.indexOf(item.status.uppercase())
+        if (currentStatusIdx >= 0) spinStatus.setSelection(currentStatusIdx)
+
+        var tempMasuk = item.checkInTime
+        var tempPulang = item.checkOutTime
+        btnMasuk.text = tempMasuk ?: "--:--:--"
+        btnPulang.text = tempPulang ?: "--:--:--"
+        edtNote.setText(item.note ?: "")
+
+        val timeFormatter = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
+        
+        btnMasuk.setOnClickListener {
+            val cal = Calendar.getInstance()
+            android.app.TimePickerDialog(requireContext(), { _, h, m ->
+                cal.set(Calendar.HOUR_OF_DAY, h)
+                cal.set(Calendar.MINUTE, m)
+                cal.set(Calendar.SECOND, 0)
+                tempMasuk = timeFormatter.format(cal.time)
+                btnMasuk.text = tempMasuk
+            }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+        }
+
+        btnPulang.setOnClickListener {
+            val cal = Calendar.getInstance()
+            android.app.TimePickerDialog(requireContext(), { _, h, m ->
+                cal.set(Calendar.HOUR_OF_DAY, h)
+                cal.set(Calendar.MINUTE, m)
+                cal.set(Calendar.SECOND, 0)
+                tempPulang = timeFormatter.format(cal.time)
+                btnPulang.text = tempPulang
+            }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), true).show()
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Koreksi Absensi")
+            .setView(dialogView)
+            .setNegativeButton("Batal", null)
+            .setPositiveButton("Simpan Lokal") { _, _ ->
+                item.status = spinStatus.selectedItem.toString()
+                item.checkInTime = tempMasuk
+                item.checkOutTime = tempPulang
+                item.note = edtNote.text.toString().trim().ifEmpty { null }
+                item.isEdited = true
+                recyclerViewRekap.adapter?.notifyItemChanged(position)
+            }
+            .show()
+    }
+    
+    private fun simpanRekapanKeDatabase() {
+        val editedItems = rekapItems.filter { it.isEdited }
+        if (editedItems.isEmpty()) {
+            Toast.makeText(requireContext(), "Tidak ada perubahan yang perlu disimpan.", Toast.LENGTH_SHORT).show()
+            return
+        }
+
+        AlertDialog.Builder(requireContext())
+            .setTitle("Konfirmasi Simpan")
+            .setMessage("Apakah kamu sudah yakin untuk menyimpannya?")
+            .setCancelable(false)
+            .setNegativeButton("Batal", null)
+            .setPositiveButton("Simpan") { _, _ ->
+                eksekusiSimpanKeSupabase(editedItems)
+            }
+            .show()
+    }
+    
+    private fun eksekusiSimpanKeSupabase(editedItems: List<RekapItem>) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    for (item in editedItems) {
+                        if (item.status == "OFF" || item.status == "IZIN" || item.status == "SAKIT") {
+                            // Generally handled by other tables, skip inserting attendance or handle logic accordingly
+                            continue
+                        }
+                        
+                        val attendanceRecord = Attendance(
+                            id = item.attendanceId,
+                            userId = item.user.id,
+                            date = selectedDate,
+                            checkInTime = item.checkInTime,
+                            checkOutTime = item.checkOutTime,
+                            status = item.status.lowercase(),
+                            note = item.note
+                        )
+                        
+                        if (item.attendanceId != null) {
+                            SupabaseClient.db.from("attendance").update(attendanceRecord) {
+                                filter { eq("id", item.attendanceId!!) }
+                            }
+                        } else {
+                            SupabaseClient.db.from("attendance").insert(attendanceRecord)
+                        }
+                    }
+                }
+                Toast.makeText(requireContext(), "Rekapan berhasil disimpan ke database!", Toast.LENGTH_LONG).show()
+                loadRekapData() // Reload everything
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Gagal menyimpan: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             } finally {
                 loadingOverlay.visibility = View.GONE
             }
@@ -327,11 +526,15 @@ class TabRekapFragment : Fragment() {
 
     // RecyclerView Adapter
     inner class RekapAdapter(private val items: List<RekapItem>) : RecyclerView.Adapter<RekapAdapter.ViewHolder>() {
+        
+        fun getItems(): List<RekapItem> = items
+        
         inner class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
             val txtName: TextView = v.findViewById(R.id.txtEmployeeName)
             val txtDetails: TextView = v.findViewById(R.id.txtEmployeeDetails)
             val txtStatus: TextView = v.findViewById(R.id.txtStatus)
             val cardStatus: androidx.cardview.widget.CardView = v.findViewById(R.id.cardStatus)
+            val txtUnsavedIndicator: TextView? = v.findViewById(R.id.txtUnsavedIndicator)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -344,6 +547,12 @@ class TabRekapFragment : Fragment() {
             holder.txtName.text = item.user.name
             holder.txtDetails.text = "Shift: ${item.user.shiftType?.uppercase() ?: "-"} | Kode: ${item.user.employeeCode ?: "-"} \nMasuk: ${item.checkInTime ?: "-"} | Pulang: ${item.checkOutTime ?: "-"}"
             holder.txtStatus.text = item.status
+            
+            if (item.isEdited) {
+                holder.txtUnsavedIndicator?.visibility = View.VISIBLE
+            } else {
+                holder.txtUnsavedIndicator?.visibility = View.GONE
+            }
 
             // Background color status badges
             when (item.status) {
@@ -367,6 +576,10 @@ class TabRekapFragment : Fragment() {
                     holder.cardStatus.setCardBackgroundColor(android.graphics.Color.parseColor("#FFEBEE"))
                     holder.txtStatus.setTextColor(android.graphics.Color.parseColor("#C62828"))
                 }
+            }
+            
+            holder.itemView.setOnClickListener {
+                showEditDialog(item, position)
             }
         }
 

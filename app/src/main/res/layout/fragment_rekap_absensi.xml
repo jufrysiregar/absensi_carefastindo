@@ -10,37 +10,59 @@
         android:id="@+id/filterPanel"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:orientation="horizontal"
-        android:padding="16dp"
+        android:orientation="vertical"
+        android:padding="12dp"
         android:background="@color/white"
-        android:elevation="2dp"
-        android:gravity="center_vertical">
+        android:elevation="2dp">
 
-        <Button
-            android:id="@+id/btnSelectDate"
-            style="@style/Widget.Material3.Button.OutlinedButton"
-            android:layout_width="0dp"
-            android:layout_weight="1"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Pilih Tanggal"
-            app:icon="@android:drawable/ic_menu_my_calendar"
-            android:textColor="@color/primary"
-            app:strokeColor="@color/primary" />
+            android:orientation="horizontal"
+            android:gravity="center_vertical">
+            <Button
+                android:id="@+id/btnSelectDate"
+                style="@style/Widget.Material3.Button.OutlinedButton"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:layout_height="wrap_content"
+                android:text="Pilih Tanggal"
+                app:icon="@android:drawable/ic_menu_my_calendar"
+                android:textColor="@color/primary"
+                app:strokeColor="@color/primary" />
+            <Space
+                android:layout_width="8dp"
+                android:layout_height="wrap_content" />
+            <Button
+                android:id="@+id/btnExportCsv"
+                style="@style/Widget.Material3.Button.ElevatedButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Ekspor CSV"
+                android:backgroundTint="@color/primary"
+                android:textColor="@color/white"
+                app:icon="@android:drawable/ic_menu_share"
+                app:iconTint="@color/white" />
+        </LinearLayout>
 
-        <Space
-            android:layout_width="12dp"
-            android:layout_height="wrap_content" />
-
-        <Button
-            android:id="@+id/btnExportCsv"
-            style="@style/Widget.Material3.Button.ElevatedButton"
-            android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:text="Ekspor CSV"
-            android:backgroundTint="@color/primary"
-            android:textColor="@color/white"
-            app:icon="@android:drawable/ic_menu_share"
-            app:iconTint="@color/white" />
+            android:orientation="horizontal"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical">
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Filter Shift:"
+                android:textStyle="bold"
+                android:layout_marginEnd="8dp"/>
+            <Spinner
+                android:id="@+id/spinFilterShift"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:background="@android:drawable/btn_dropdown" />
+        </LinearLayout>
     </LinearLayout>
 
     <!-- Main List Container -->
@@ -49,8 +71,46 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_below="@id/filterPanel"
+        android:layout_above="@id/actionPanel"
         android:padding="12dp"
         android:clipToPadding="false" />
+
+    <!-- Bottom Action Panel -->
+    <LinearLayout
+        android:id="@+id/actionPanel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_alignParentBottom="true"
+        android:orientation="horizontal"
+        android:padding="12dp"
+        android:background="@color/white"
+        android:elevation="8dp"
+        android:gravity="center_vertical">
+
+        <Button
+            android:id="@+id/btnHadirkanSemua"
+            style="@style/Widget.Material3.Button.OutlinedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Hadirkan Semua"
+            android:textColor="@color/primary"
+            app:strokeColor="@color/primary" />
+            
+        <Space
+            android:layout_width="8dp"
+            android:layout_height="wrap_content" />
+
+        <Button
+            android:id="@+id/btnSimpanRekapan"
+            style="@style/Widget.Material3.Button.ElevatedButton"
+            android:layout_width="0dp"
+            android:layout_weight="1"
+            android:layout_height="wrap_content"
+            android:text="Simpan Rekapan"
+            android:backgroundTint="@color/primary"
+            android:textColor="@color/white" />
+    </LinearLayout>
 
     <!-- Empty State -->
     <TextView
