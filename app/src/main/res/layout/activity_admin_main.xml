@@ -29,7 +29,8 @@
                 android:layout_height="wrap_content"
                 android:orientation="horizontal"
                 android:background="@android:color/white"
-                android:padding="16dp"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="12dp"
                 android:gravity="center_vertical">
 
                 <ImageButton
@@ -41,29 +42,25 @@
                     android:contentDescription="Open menu"
                     android:tint="@color/text_primary_light" />
 
+                <!-- Didekatkan langsung tanpa marginStart -->
                 <ImageView
                     android:id="@+id/imgLogo"
                     android:layout_width="110dp"
                     android:layout_height="40dp"
-                    android:layout_marginStart="8dp"
                     android:src="@drawable/header_logo"
                     android:scaleType="fitCenter" />
 
-                <Space
-                    android:layout_width="0dp"
-                    android:layout_height="wrap_content"
-                    android:layout_weight="1" />
-
+                <!-- Teks di tengah sisa ruang (tidak akan menabrak logo) -->
                 <TextView
                     android:id="@+id/txtToolbarTitle"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_marginStart="8dp"
+                    android:layout_weight="1"
                     android:text="Dashboard Admin"
                     android:textColor="@color/text_primary_light"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:gravity="end"
+                    android:gravity="center"
                     android:maxLines="2" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
