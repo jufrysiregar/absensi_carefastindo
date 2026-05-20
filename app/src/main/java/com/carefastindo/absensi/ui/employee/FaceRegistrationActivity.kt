@@ -54,6 +54,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
     private var isProcessing = false
     private var isRegistered = false
+    private var frameCounter = 0
 
     enum class RegistrationStep { FRONT, LEFT, RIGHT, DONE }
     private var currentStep = RegistrationStep.FRONT
@@ -93,6 +94,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 }
 
             val imageAnalyzer = ImageAnalysis.Builder()
+                .setTargetResolution(android.util.Size(480, 360)) // Resize kamera jadi kecil agar sangat ringan
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
                 .build()
                 .also {
@@ -122,11 +124,18 @@ class FaceRegistrationActivity : AppCompatActivity() {
             return
         }
 
+        frameCounter++
+        // Frame skipping: Hanya proses 1 dari 5 frame agar tidak berat/ngelag
+        if (frameCounter % 5 != 0) {
+            imageProxy.close()
+            return
+        }
+
         val mediaImage = imageProxy.image
         if (mediaImage != null) {
             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             val options = FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST) // Gunakan FAST untuk registrasi agar sangat cepat
                 .build()
             val detector = FaceDetection.getClient(options)
 
