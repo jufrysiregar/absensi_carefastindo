@@ -27,59 +27,46 @@
             <LinearLayout
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:orientation="vertical"
+                android:orientation="horizontal"
                 android:background="@android:color/white"
-                android:padding="20dp">
+                android:padding="16dp"
+                android:gravity="center_vertical">
 
-                <RelativeLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content">
+                <ImageButton
+                    android:id="@+id/btnMenu"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@drawable/ic_menu_custom"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Open menu"
+                    android:tint="@color/text_primary_light" />
 
-                    <ImageView
-                        android:id="@+id/imgLogo"
-                        android:layout_width="100dp"
-                        android:layout_height="40dp"
-                        android:layout_alignParentStart="true"
-                        android:layout_centerVertical="true"
-                        android:src="@drawable/logo"
-                        android:scaleType="fitCenter" />
+                <ImageView
+                    android:id="@+id/imgLogo"
+                    android:layout_width="110dp"
+                    android:layout_height="40dp"
+                    android:layout_marginStart="8dp"
+                    android:src="@drawable/logo"
+                    android:scaleType="fitCenter" />
 
-                    <TextView
-                        android:id="@+id/txtToolbarTitle"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_centerVertical="true"
-                        android:layout_toEndOf="@id/imgLogo"
-                        android:layout_marginStart="16dp"
-                        android:text="Dashboard Admin"
-                        android:textColor="@color/text_primary_light"
-                        android:textSize="18sp"
-                        android:textStyle="bold" />
-                </RelativeLayout>
+                <Space
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1" />
+
+                <TextView
+                    android:id="@+id/txtToolbarTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Dashboard Admin"
+                    android:textColor="@color/text_primary_light"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:gravity="end"
+                    android:maxLines="2" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
-
-        <!-- Navbar Spaghetti Bar -->
-        <LinearLayout
-            android:id="@+id/navBarLayout"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:orientation="horizontal"
-            android:background="@android:color/white"
-            android:elevation="2dp"
-            android:paddingHorizontal="16dp"
-            android:paddingVertical="4dp"
-            app:layout_constraintTop_toBottomOf="@id/headerCard">
-
-            <ImageButton
-                android:id="@+id/btnMenu"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                android:src="@drawable/ic_menu_custom"
-                android:background="?attr/selectableItemBackgroundBorderless"
-                android:contentDescription="Open menu"
-                android:tint="@color/text_primary_light" />
-        </LinearLayout>
 
         <!-- Fragment Container FrameLayout -->
         <FrameLayout
