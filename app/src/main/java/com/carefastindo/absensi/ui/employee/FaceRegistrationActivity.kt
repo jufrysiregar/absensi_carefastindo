@@ -126,7 +126,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
         if (mediaImage != null) {
             val image = InputImage.fromMediaImage(mediaImage, imageProxy.imageInfo.rotationDegrees)
             val options = FaceDetectorOptions.Builder()
-                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_FAST)
+                .setPerformanceMode(FaceDetectorOptions.PERFORMANCE_MODE_ACCURATE)
                 .build()
             val detector = FaceDetection.getClient(options)
 
@@ -145,11 +145,13 @@ class FaceRegistrationActivity : AppCompatActivity() {
                             val rotatedBitmap = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
                             
                             try {
-                                // Clamp bounding box
-                                val left = boundingBox.left.coerceAtLeast(0)
-                                val top = boundingBox.top.coerceAtLeast(0)
-                                val width = boundingBox.width().coerceAtMost(rotatedBitmap.width - left)
-                                val height = boundingBox.height().coerceAtMost(rotatedBitmap.height - top)
+                                // Tambah margin 20% agar seluruh kepala (rambut/dagu) masuk untuk akurasi AI yang lebih tinggi
+                                val marginX = (boundingBox.width() * 0.2f).toInt()
+                                val marginY = (boundingBox.height() * 0.2f).toInt()
+                                val left = (boundingBox.left - marginX).coerceAtLeast(0)
+                                val top = (boundingBox.top - marginY).coerceAtLeast(0)
+                                val width = (boundingBox.width() + marginX * 2).coerceAtMost(rotatedBitmap.width - left)
+                                val height = (boundingBox.height() + marginY * 2).coerceAtMost(rotatedBitmap.height - top)
                                 
                                 val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
                                 val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
