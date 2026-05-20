@@ -55,6 +55,11 @@ class FaceRegistrationActivity : AppCompatActivity() {
     private var isProcessing = false
     private var isRegistered = false
 
+    enum class RegistrationStep { FRONT, LEFT, RIGHT, DONE }
+    private var currentStep = RegistrationStep.FRONT
+    private val capturedEmbeddings = mutableMapOf<RegistrationStep, FloatArray>()
+    private var isDelaying = false
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_face_camera)
@@ -127,7 +132,8 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
             detector.process(image)
                 .addOnSuccessListener { faces ->
-                    if (faces.isNotEmpty() && !isProcessing) {
+
+                    if (faces.isNotEmpty() && !isProcessing && !isDelaying && currentStep != RegistrationStep.DONE) {
                         isProcessing = true
                         // Ambil wajah dengan ukuran paling besar (mengabaikan false positive di background)
                         val face = faces.maxByOrNull { it.boundingBox.width() * it.boundingBox.height() } ?: faces[0]
@@ -137,9 +143,6 @@ class FaceRegistrationActivity : AppCompatActivity() {
                         val bitmap = imageProxyToBitmap(imageProxy)
                         if (bitmap != null) {
                             val rotatedBitmap = rotateBitmap(bitmap, imageProxy.imageInfo.rotationDegrees.toFloat())
-                            // Adjust bounding box to rotated bitmap
-                            // Note: mlkit bounding box is relative to unrotated image depending on configuration,
-                            // but InputImage handles rotation. Let's crop center roughly or use boundingBox carefully.
                             
                             try {
                                 // Clamp bounding box
@@ -152,7 +155,8 @@ class FaceRegistrationActivity : AppCompatActivity() {
                                 val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
 
                                 if (embedding != null) {
-                                    registerFace(embedding, faceBitmap)
+                                    capturedEmbeddings[currentStep] = embedding
+                                    moveToNextStep(faceBitmap)
                                 } else {
                                     isProcessing = false
                                 }
@@ -163,10 +167,17 @@ class FaceRegistrationActivity : AppCompatActivity() {
                         } else {
                             isProcessing = false
                         }
-                    } else if (!isProcessing) {
+                    } else if (!isProcessing && !isDelaying) {
                         // instruction
                         runOnUiThread {
-                            if (faces.isEmpty()) txtInstruction.text = "Tidak ada wajah terdeteksi"
+                            val msg = when(currentStep) {
+                                RegistrationStep.FRONT -> "Tatap layar lurus ke Depan"
+                                RegistrationStep.LEFT -> "Tolehkan wajah sedikit ke Kiri"
+                                RegistrationStep.RIGHT -> "Tolehkan wajah sedikit ke Kanan"
+                                else -> ""
+                            }
+                            if (faces.isEmpty()) txtInstruction.text = "Tidak ada wajah terdeteksi\n$msg"
+                            else txtInstruction.text = msg
                         }
                     }
                 }
@@ -181,22 +192,51 @@ class FaceRegistrationActivity : AppCompatActivity() {
         }
     }
 
-    private fun registerFace(embedding: FloatArray, faceBitmap: Bitmap) {
+    
+    private fun moveToNextStep(lastBitmap: Bitmap) {
+        when (currentStep) {
+            RegistrationStep.FRONT -> {
+                currentStep = RegistrationStep.LEFT
+                isDelaying = true
+                runOnUiThread { txtInstruction.text = "Bagus! Sekarang tolehkan wajah sedikit ke Kiri" }
+                lifecycleScope.launch {
+                    kotlinx.coroutines.delay(2000)
+                    isDelaying = false
+                    isProcessing = false
+                }
+            }
+            RegistrationStep.LEFT -> {
+                currentStep = RegistrationStep.RIGHT
+                isDelaying = true
+                runOnUiThread { txtInstruction.text = "Bagus! Sekarang tolehkan wajah sedikit ke Kanan" }
+                lifecycleScope.launch {
+                    kotlinx.coroutines.delay(2000)
+                    isDelaying = false
+                    isProcessing = false
+                }
+            }
+            RegistrationStep.RIGHT -> {
+                currentStep = RegistrationStep.DONE
+                registerFaces(lastBitmap)
+            }
+            RegistrationStep.DONE -> {}
+        }
+    }
+
+    private fun registerFaces(faceBitmap: Bitmap) {
         runOnUiThread {
             progressBar.visibility = View.VISIBLE
-            txtInstruction.text = "Memproses pendaftaran wajah..."
+            txtInstruction.text = "Memproses pendaftaran wajah (3 sisi)..."
         }
 
         lifecycleScope.launch {
             try {
                 val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return@launch
                 
-                // Convert bitmap to byte array
                 val baos = ByteArrayOutputStream()
                 faceBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
                 val byteArray = baos.toByteArray()
                 
-                // Upload photo
                 val timestamp = System.currentTimeMillis()
                 val photoPath = "$userId/${timestamp}_face.jpg"
                 
@@ -208,22 +248,31 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 
                 val photoUrl = SupabaseClient.storage.from("face_photos").publicUrl(photoPath)
                 
-                // Convert embedding to JSON String
-                val jsonArray = JSONArray()
-                for (f in embedding) {
-                    jsonArray.put(f.toDouble())
-                }
-                val embeddingStr = jsonArray.toString()
-                
-                val userFace = UserFace(userId = userId, faceVector = embeddingStr, facePhotoUrl = photoUrl)
-                
                 withContext(Dispatchers.IO) {
-                    SupabaseClient.db.from("user_faces").insert(userFace)
+                    try {
+                        SupabaseClient.db.from("user_faces").delete {
+                            filter { eq("user_id", userId) }
+                        }
+                    } catch (e: Exception) {}
+                }
+
+                val facesToInsert = capturedEmbeddings.values.map { embedding ->
+                    val jsonArray = JSONArray()
+                    for (f in embedding) {
+                        jsonArray.put(f.toDouble())
+                    }
+                    UserFace(userId = userId, faceVector = jsonArray.toString(), facePhotoUrl = photoUrl)
+                }
+
+                withContext(Dispatchers.IO) {
+                    for (face in facesToInsert) {
+                        SupabaseClient.db.from("user_faces").insert(face)
+                    }
                 }
 
                 withContext(Dispatchers.Main) {
                     isRegistered = true
-                    Toast.makeText(this@FaceRegistrationActivity, "Wajah berhasil didaftarkan!", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this@FaceRegistrationActivity, "Wajah berhasil didaftarkan (3 Sisi)!", Toast.LENGTH_LONG).show()
                     finish()
                 }
 
@@ -232,6 +281,8 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 withContext(Dispatchers.Main) {
                     Toast.makeText(this@FaceRegistrationActivity, "Gagal mendaftar wajah: ${e.message}", Toast.LENGTH_LONG).show()
                     isProcessing = false
+                    currentStep = RegistrationStep.FRONT
+                    capturedEmbeddings.clear()
                     progressBar.visibility = View.GONE
                 }
             }

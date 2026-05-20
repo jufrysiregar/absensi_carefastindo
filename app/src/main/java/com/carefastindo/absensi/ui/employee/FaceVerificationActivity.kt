@@ -54,7 +54,7 @@ class FaceVerificationActivity : AppCompatActivity() {
     private lateinit var faceVerificationHelper: FaceVerificationHelper
 
     private var isProcessing = false
-    private var baseFaceVector: FloatArray? = null
+    private var baseFaceVectors: List<FloatArray> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -89,13 +89,17 @@ class FaceVerificationActivity : AppCompatActivity() {
                 }
 
                 if (userFaces.isNotEmpty()) {
-                    val vectorStr = userFaces[0].faceVector
-                    val jsonArray = JSONArray(vectorStr)
-                    val floatArray = FloatArray(jsonArray.length())
-                    for (i in 0 until jsonArray.length()) {
-                        floatArray[i] = jsonArray.getDouble(i).toFloat()
+                    val vectors = mutableListOf<FloatArray>()
+                    for (face in userFaces) {
+                        val vectorStr = face.faceVector
+                        val jsonArray = JSONArray(vectorStr)
+                        val floatArray = FloatArray(jsonArray.length())
+                        for (i in 0 until jsonArray.length()) {
+                            floatArray[i] = jsonArray.getDouble(i).toFloat()
+                        }
+                        vectors.add(floatArray)
                     }
-                    baseFaceVector = floatArray
+                    baseFaceVectors = vectors
                 } else {
                     withContext(Dispatchers.Main) {
                         Toast.makeText(this@FaceVerificationActivity, "Wajah belum didaftarkan! Silakan daftar wajah di Profil terlebih dahulu.", Toast.LENGTH_LONG).show()
@@ -146,7 +150,7 @@ class FaceVerificationActivity : AppCompatActivity() {
 
     @OptIn(ExperimentalGetImage::class)
     private fun processImageProxy(imageProxy: ImageProxy) {
-        if (isProcessing || baseFaceVector == null) {
+        if (isProcessing || baseFaceVectors.isEmpty()) {
             imageProxy.close()
             return
         }
@@ -181,15 +185,20 @@ class FaceVerificationActivity : AppCompatActivity() {
                                 val faceBitmap = Bitmap.createBitmap(rotatedBitmap, left, top, width, height)
                                 val embedding = faceVerificationHelper.extractEmbedding(faceBitmap)
 
-                                if (embedding != null && baseFaceVector != null) {
-                                    val similarity = faceVerificationHelper.cosineSimilarity(embedding, baseFaceVector!!)
-                                    if (similarity > 0.8f) {
+                                if (embedding != null && baseFaceVectors.isNotEmpty()) {
+                                    var maxSimilarity = -1f
+                                    for (baseVector in baseFaceVectors) {
+                                        val sim = faceVerificationHelper.cosineSimilarity(embedding, baseVector)
+                                        if (sim > maxSimilarity) maxSimilarity = sim
+                                    }
+
+                                    if (maxSimilarity > 0.8f) {
                                         // Wajah Cocok
                                         uploadSelfieAndFinish(faceBitmap)
                                     } else {
                                         // Wajah Tidak Cocok
                                         runOnUiThread {
-                                            txtInstruction.text = "Verifikasi wajah gagal (Similarity: ${"%.2f".format(similarity)}). Silakan coba lagi."
+                                            txtInstruction.text = "Verifikasi wajah gagal (Akurasi: ${"%.2f".format(maxSimilarity)}). Pastikan wajah Anda terlihat jelas."
                                         }
                                         isProcessing = false
                                     }
