@@ -4,6 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.os.Bundle
+import android.util.Base64
 import android.util.Log
 import android.view.View
 import android.widget.ProgressBar
@@ -58,6 +59,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
     private val capturedEmbeddings = mutableMapOf<RegistrationStep, FloatArray>()
     private val tempStepEmbeddings = mutableListOf<FloatArray>()
     private var isDelaying = false
+    private var frontReferenceBitmap: Bitmap? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -316,6 +318,8 @@ class FaceRegistrationActivity : AppCompatActivity() {
                 RegistrationStep.FRONT -> {
                     currentStep = RegistrationStep.LEFT
                     isDelaying = true
+                    frontReferenceBitmap?.recycle()
+                    frontReferenceBitmap = lastBitmap.copy(Bitmap.Config.ARGB_8888, false)
                     lastBitmap.recycle()
                     runOnUiThread {
                         progressBar.visibility = View.GONE
@@ -342,7 +346,12 @@ class FaceRegistrationActivity : AppCompatActivity() {
                     runOnUiThread {
                         txtInstruction.text = "Wajah kanan berhasil direkam!\nMenyimpan data wajah..."
                     }
-                    registerFaces(lastBitmap)
+                    val referenceBitmap = frontReferenceBitmap ?: lastBitmap
+                    frontReferenceBitmap = null
+                    if (referenceBitmap !== lastBitmap) {
+                        lastBitmap.recycle()
+                    }
+                    registerFaces(referenceBitmap)
                 }
                 RegistrationStep.DONE -> {}
             }
@@ -377,7 +386,7 @@ class FaceRegistrationActivity : AppCompatActivity() {
                     val faceRecord = UserFace(
                         userId = userId,
                         faceVector = embeddingToJson(finalEmbedding),
-                        facePhotoUrl = photoUrl ?: existingFaces.firstOrNull()?.facePhotoUrl
+                        facePhotoUrl = photoUrl
                     )
 
                     if (existingFaces.isNotEmpty()) {
@@ -403,6 +412,8 @@ class FaceRegistrationActivity : AppCompatActivity() {
                     currentStep = RegistrationStep.FRONT
                     capturedEmbeddings.clear()
                     tempStepEmbeddings.clear()
+                    frontReferenceBitmap?.recycle()
+                    frontReferenceBitmap = null
                     progressBar.visibility = View.GONE
                     txtInstruction.text = "Registrasi gagal. Posisikan wajah Anda di dalam kotak dan coba lagi."
                 }
@@ -422,11 +433,9 @@ class FaceRegistrationActivity : AppCompatActivity() {
         return jsonArray.toString()
     }
 
-    private suspend fun uploadReferencePhoto(userId: String, faceBitmap: Bitmap): String? {
+    private suspend fun uploadReferencePhoto(userId: String, faceBitmap: Bitmap): String {
+        val byteArray = createProfilePhotoBytes(faceBitmap)
         return try {
-            val baos = ByteArrayOutputStream()
-            faceBitmap.compress(Bitmap.CompressFormat.JPEG, 90, baos)
-            val byteArray = baos.toByteArray()
             val photoPath = "$userId/${System.currentTimeMillis()}_face.jpg"
 
             withContext(Dispatchers.IO) {
@@ -437,9 +446,31 @@ class FaceRegistrationActivity : AppCompatActivity() {
 
             SupabaseClient.storage.from("face_photos").publicUrl(photoPath)
         } catch (e: Exception) {
-            Log.w("FaceRegistration", "Foto referensi wajah tidak tersimpan, registrasi tetap dilanjutkan", e)
-            null
+            Log.w("FaceRegistration", "Foto wajah gagal diupload ke Storage, memakai data URL thumbnail", e)
+            "data:image/jpeg;base64,${Base64.encodeToString(byteArray, Base64.NO_WRAP)}"
         }
+    }
+
+    private fun createProfilePhotoBytes(faceBitmap: Bitmap): ByteArray {
+        val maxDim = faceBitmap.width.coerceAtLeast(faceBitmap.height)
+        val outputBitmap = if (maxDim > 320) {
+            val scale = 320f / maxDim
+            Bitmap.createScaledBitmap(
+                faceBitmap,
+                (faceBitmap.width * scale).toInt().coerceAtLeast(1),
+                (faceBitmap.height * scale).toInt().coerceAtLeast(1),
+                true
+            )
+        } else {
+            faceBitmap
+        }
+
+        val baos = ByteArrayOutputStream()
+        outputBitmap.compress(Bitmap.CompressFormat.JPEG, 85, baos)
+        if (outputBitmap !== faceBitmap) {
+            outputBitmap.recycle()
+        }
+        return baos.toByteArray()
     }
 
     override fun onRequestPermissionsResult(
@@ -468,6 +499,8 @@ class FaceRegistrationActivity : AppCompatActivity() {
         if (::faceVerificationHelper.isInitialized) {
             faceVerificationHelper.close()
         }
+        frontReferenceBitmap?.recycle()
+        frontReferenceBitmap = null
         try {
             if (::faceDetector.isInitialized) {
                 faceDetector.close()

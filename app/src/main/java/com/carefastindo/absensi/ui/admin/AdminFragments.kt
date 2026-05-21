@@ -593,7 +593,7 @@ class TabRekapFragment : Fragment() {
 class TabLeaveRequestsFragment : Fragment() {
     private lateinit var recyclerViewLeave: RecyclerView
     private lateinit var txtNoData: TextView
-    private lateinit var loadingOverlay: FrameLayout
+    private lateinit var loadingOverlay: View
     private var requestsList = mutableListOf<LeaveRequestWithUser>()
 
     data class LeaveRequestWithUser(
@@ -605,7 +605,7 @@ class TabLeaveRequestsFragment : Fragment() {
         inflater: LayoutInflater, container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View? {
-        val view = inflater.inflate(R.layout.fragment_pengajuan_izin, container, false)
+        val view = inflater.inflate(R.layout.fragment_admin_leave_requests, container, false)
         recyclerViewLeave = view.findViewById(R.id.rvLeaveHistory)
         txtNoData = view.findViewById(R.id.txtEmptyHistory)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
