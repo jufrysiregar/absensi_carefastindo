@@ -634,7 +634,7 @@ export default function ManagementEmployeePage() {
                       </TableCell>
                       <TableCell className="py-3">
                         <Badge variant={getRoleVariant(u.role) as any} className="capitalize font-medium">
-                          {u.role === 'spv' ? 'Shift Kantor (SPV)' : u.role}
+                          {u.role === 'spv' ? 'SPV' : u.role}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-600 font-medium py-3">
