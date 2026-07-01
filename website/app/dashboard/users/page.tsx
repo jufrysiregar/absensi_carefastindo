@@ -206,15 +206,34 @@ export default function UsersPage() {
 
       // 2. Update user_shifts if shift changed
       if (editForm.shiftId !== editingUser.shift_id) {
-        const { error: shiftError } = await supabase
+        const { data: existingShifts, error: fetchError } = await supabase
           .from('user_shifts')
-          .upsert({
-            user_id: editingUser.id,
-            shift_id: editForm.shiftId || null,
-            effective_date: new Date().toISOString().split('T')[0]
-          }, { onConflict: 'user_id' })
+          .select('id')
+          .eq('user_id', editingUser.id)
 
-        if (shiftError) throw shiftError
+        if (fetchError) throw fetchError
+
+        if (existingShifts && existingShifts.length > 0) {
+          const { error: shiftError } = await supabase
+            .from('user_shifts')
+            .update({
+              shift_id: editForm.shiftId || null,
+              effective_date: new Date().toISOString().split('T')[0]
+            })
+            .eq('id', existingShifts[0].id)
+
+          if (shiftError) throw shiftError
+        } else {
+          const { error: shiftError } = await supabase
+            .from('user_shifts')
+            .insert({
+              user_id: editingUser.id,
+              shift_id: editForm.shiftId || null,
+              effective_date: new Date().toISOString().split('T')[0]
+            })
+
+          if (shiftError) throw shiftError
+        }
       }
 
       toast.success('Data karyawan berhasil diperbarui!')
