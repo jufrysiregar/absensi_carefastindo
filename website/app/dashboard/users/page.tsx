@@ -543,7 +543,7 @@ export default function ManagementEmployeePage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-slate-800">Management Employee</h1>
+          <h1 className="text-2xl font-bold text-slate-800">Manajemen Karyawan</h1>
           <p className="text-sm text-slate-500 mt-1">Kelola data karyawan, shift, dan absensi dalam satu halaman.</p>
         </div>
       </div>

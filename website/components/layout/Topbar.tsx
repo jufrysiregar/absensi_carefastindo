@@ -7,7 +7,7 @@ import { ChevronRight } from 'lucide-react'
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/dashboard/attendance': 'Attendance',
-  '/dashboard/users': 'Users & Shift Management',
+  '/dashboard/users': 'Management Employee',
   '/dashboard/qr-code': 'QR Code Generator',
   '/dashboard/announcements': 'Announcements',
   '/dashboard/reports': 'Reports',
