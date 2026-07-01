@@ -15,5 +15,7 @@ data class Attendance(
     @SerialName("location_lng") val locationLng: Double? = null,
     @SerialName("status") val status: String, // 'hadir', 'terlambat', 'tidak_absen'
     @SerialName("note") val note: String? = null,
-    @SerialName("selfie_url") val selfieUrl: String? = null
+    @SerialName("selfie_url") val selfieUrl: String? = null,
+    @SerialName("break_start") val breakStart: String? = null,
+    @SerialName("break_end") val breakEnd: String? = null
 )

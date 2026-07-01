@@ -44,6 +44,11 @@ import java.util.Date
 import java.util.Locale
 import androidx.activity.result.contract.ActivityResultContracts
 import android.app.Activity
+import android.os.CountDownTimer
+import android.os.Vibrator
+import android.os.VibrationEffect
+import android.os.Build
+import java.util.TimeZone
 
 class EmployeeDashboardFragment : Fragment() {
 
@@ -53,6 +58,7 @@ class EmployeeDashboardFragment : Fragment() {
     
     private val viewModel: EmployeeViewModel by activityViewModels()
     private lateinit var fusedLocationClient: FusedLocationProviderClient
+    private var breakCountdownTimer: CountDownTimer? = null
 
     // Cache parameters to avoid duplicate queries
     private var todayAttendance: Attendance? = null
@@ -136,11 +142,16 @@ class EmployeeDashboardFragment : Fragment() {
         }
 
         btnBreak?.setOnClickListener {
-            startPresensiFlow("break")
+            startBreakFlow()
         }
 
         btnCheckOut?.setOnClickListener {
             startPresensiFlow("check_out")
+        }
+
+        val btnEndBreakEarly = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnEndBreakEarly)
+        btnEndBreakEarly?.setOnClickListener {
+            endBreakEarly()
         }
     }
 
@@ -234,6 +245,9 @@ class EmployeeDashboardFragment : Fragment() {
         val adminNotificationCard = view.findViewById<androidx.cardview.widget.CardView>(R.id.adminNotificationCard)
         val txtAdminNotificationContent = view.findViewById<android.widget.TextView>(R.id.txtAdminNotificationContent)
 
+        val cardBreakCountdown = view.findViewById<androidx.cardview.widget.CardView>(R.id.cardBreakCountdown)
+        val cardActionsPanel = view.findViewById<androidx.cardview.widget.CardView>(R.id.cardActionsPanel)
+
         // 1. Update Status Cards
         val att = todayAttendance
         if (att == null) {
@@ -241,15 +255,43 @@ class EmployeeDashboardFragment : Fragment() {
             txtCheckInTime.text = "--"
             txtBreakTime.text = "--"
             txtCheckOutTime.text = "--"
+            
+            cardBreakCountdown?.visibility = View.GONE
+            cardActionsPanel?.visibility = View.VISIBLE
+            breakCountdownTimer?.cancel()
+            breakCountdownTimer = null
         } else {
             txtCheckInTime.text = att.checkInTime?.substring(0, 5) ?: "--"
-            txtBreakTime.text = att.breakTime?.substring(0, 5) ?: "--"
+            txtBreakTime.text = formatTimestampToTime(att.breakStart)
             txtCheckOutTime.text = att.checkOutTime?.substring(0, 5) ?: "--"
+
+            val isOnBreak = att.breakStart != null && att.breakEnd == null
 
             when {
                 att.checkOutTime != null -> txtTodayStatus.text = "Status hari ini: Sudah pulang (${att.checkOutTime.substring(0, 5)})"
-                att.breakTime != null -> txtTodayStatus.text = "Status hari ini: Sedang istirahat (${att.breakTime.substring(0, 5)})"
+                isOnBreak -> txtTodayStatus.text = "Status hari ini: Sedang istirahat (${formatTimestampToTime(att.breakStart)})"
+                att.breakEnd != null -> txtTodayStatus.text = "Status hari ini: Kembali bekerja (${formatTimestampToTime(att.breakEnd)})"
                 else -> txtTodayStatus.text = "Status hari ini: Sudah absen masuk (${att.checkInTime?.substring(0, 5)})"
+            }
+
+            if (isOnBreak) {
+                cardBreakCountdown?.visibility = View.VISIBLE
+                cardActionsPanel?.visibility = View.GONE
+                
+                val breakStartDate = parseIsoTimestamp(att.breakStart)
+                val elapsedSeconds = (System.currentTimeMillis() - breakStartDate.time) / 1000
+                val remainingSeconds = 3600 - elapsedSeconds
+                
+                if (remainingSeconds > 0) {
+                    startLocalCountdown(remainingSeconds, breakStartDate)
+                } else {
+                    endBreakAutomatically(att.id ?: "")
+                }
+            } else {
+                cardBreakCountdown?.visibility = View.GONE
+                cardActionsPanel?.visibility = View.VISIBLE
+                breakCountdownTimer?.cancel()
+                breakCountdownTimer = null
             }
         }
 
@@ -258,7 +300,6 @@ class EmployeeDashboardFragment : Fragment() {
         if (user != null) {
             val role = user.role
             val shiftType = user.shiftType
-            val breakStart = user.breakStart
 
             // Check In Button
             val hasCheckedIn = att?.checkInTime != null
@@ -269,7 +310,7 @@ class EmployeeDashboardFragment : Fragment() {
             btnCheckIn.alpha = if (allowedCheckIn) 1.0f else 0.5f
 
             // Break Button (Conditional based on field situation/TL, so it can be clicked anytime after check in)
-            val hasCheckedInButNotBreak = hasCheckedIn && att?.breakTime == null
+            val hasCheckedInButNotBreak = hasCheckedIn && att?.breakStart == null
             val allowedBreak = hasCheckedInButNotBreak
             
             btnBreak.isEnabled = allowedBreak
@@ -316,11 +357,17 @@ class EmployeeDashboardFragment : Fragment() {
 
                 state.user?.let { u ->
                     txtEmployeeName?.text = u.name
-                    txtEmployeeRole?.text = "${u.position ?: u.role} - ${u.shiftType ?: "-"}"
-                    txtEmployeeNip?.text = "NIP: ${u.nip ?: "-"}"
-                    
-                    val (masuk, pulang) = ShiftHelper.getShiftTimes(u.role, u.shiftType)
-                    txtEmployeeShiftTime?.text = "($masuk - $pulang)"
+                    if (u.role.equals("superadmin", ignoreCase = true)) {
+                        txtEmployeeRole?.text = u.role
+                        txtEmployeeNip?.text = "NIP: N/A"
+                        txtEmployeeShiftTime?.text = "(N/A - N/A)"
+                    } else {
+                        txtEmployeeRole?.text = "${u.position ?: u.role} - ${u.shiftType ?: "-"}"
+                        txtEmployeeNip?.text = "NIP: ${u.nip ?: "-"}"
+                        
+                        val (masuk, pulang) = ShiftHelper.getShiftTimes(u.role, u.shiftType)
+                        txtEmployeeShiftTime?.text = "($masuk - $pulang)"
+                    }
                 }
 
                 txtLiveTime?.text = state.liveTime
@@ -531,8 +578,193 @@ class EmployeeDashboardFragment : Fragment() {
         }
     }
 
+    private fun startBreakFlow() {
+        val attId = todayAttendance?.id ?: return
+        val nowStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ", Locale.getDefault()).format(Date())
+        
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("attendance").update({
+                        set("break_start", nowStr)
+                    }) {
+                        filter {
+                            eq("id", attId)
+                        }
+                    }
+                }
+                Toast.makeText(requireContext(), "Istirahat Berhasil Dimulai!", Toast.LENGTH_SHORT).show()
+                refreshDashboardData()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(requireContext(), "Gagal memulai istirahat: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun endBreakEarly() {
+        val attId = todayAttendance?.id ?: return
+        val nowStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ", Locale.getDefault()).format(Date())
+        
+        breakCountdownTimer?.cancel()
+        breakCountdownTimer = null
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("attendance").update({
+                        set("break_end", nowStr)
+                    }) {
+                        filter {
+                            eq("id", attId)
+                        }
+                    }
+                }
+                Toast.makeText(requireContext(), "Kembali bekerja!", Toast.LENGTH_SHORT).show()
+                refreshDashboardData()
+            } catch (e: Exception) {
+                e.printStackTrace()
+                Toast.makeText(requireContext(), "Gagal menyelesaikan istirahat: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun endBreakAutomatically(attendanceId: String) {
+        val nowStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSZZZZZ", Locale.getDefault()).format(Date())
+        
+        breakCountdownTimer?.cancel()
+        breakCountdownTimer = null
+
+        // Trigger vibration
+        try {
+            val vibrator = requireContext().getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                vibrator.vibrate(VibrationEffect.createOneShot(1000, VibrationEffect.DEFAULT_AMPLITUDE))
+            } else {
+                @Suppress("DEPRECATION")
+                vibrator.vibrate(1000)
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("attendance").update({
+                        set("break_end", nowStr)
+                    }) {
+                        filter {
+                            eq("id", attendanceId)
+                        }
+                    }
+                }
+                Toast.makeText(requireContext(), "Waktu istirahat Anda telah berakhir!", Toast.LENGTH_LONG).show()
+                refreshDashboardData()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun startLocalCountdown(remainingSeconds: Long, breakStartDate: Date) {
+        val view = view ?: return
+        val txtBreakCountdown = view.findViewById<android.widget.TextView>(R.id.txtBreakCountdown)
+        val progressBreak = view.findViewById<android.widget.ProgressBar>(R.id.progressBreak)
+        val txtBreakStart = view.findViewById<android.widget.TextView>(R.id.txtBreakStart)
+        val txtBreakEnd = view.findViewById<android.widget.TextView>(R.id.txtBreakEnd)
+
+        val timeFormat = SimpleDateFormat("HH:mm", Locale.getDefault())
+        txtBreakStart?.text = "Mulai: ${timeFormat.format(breakStartDate)}"
+        txtBreakEnd?.text = "Selesai: ${timeFormat.format(Date(breakStartDate.time + 3600 * 1000))}"
+
+        breakCountdownTimer?.cancel()
+        
+        progressBreak?.max = 3600
+        progressBreak?.progress = remainingSeconds.toInt()
+
+        breakCountdownTimer = object : CountDownTimer(remainingSeconds * 1000, 1000) {
+            override fun onTick(millisUntilFinished: Long) {
+                val secsLeft = millisUntilFinished / 1000
+                val minutes = secsLeft / 60
+                val secs = secsLeft % 60
+                txtBreakCountdown?.text = String.format("%02dm %02ds", minutes, secs)
+                progressBreak?.progress = secsLeft.toInt()
+            }
+
+            override fun onFinish() {
+                txtBreakCountdown?.text = "00m 00s"
+                progressBreak?.progress = 0
+                val attId = todayAttendance?.id
+                if (attId != null) {
+                    endBreakAutomatically(attId)
+                }
+            }
+        }.start()
+    }
+
+    private fun formatTimestampToTime(ts: String?): String {
+        if (ts.isNullOrEmpty()) return "--"
+        try {
+            val formats = listOf(
+                "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+                "yyyy-MM-dd'T'HH:mm:ss.SSS",
+                "yyyy-MM-dd'T'HH:mm:ss",
+                "yyyy-MM-dd HH:mm:ss"
+            )
+            for (fmt in formats) {
+                try {
+                    val parser = SimpleDateFormat(fmt, Locale.getDefault())
+                    if (ts.endsWith("Z")) {
+                        parser.timeZone = TimeZone.getTimeZone("UTC")
+                    }
+                    val date = parser.parse(ts)
+                    if (date != null) {
+                        return SimpleDateFormat("HH:mm", Locale.getDefault()).format(date)
+                    }
+                } catch (e: Exception) {
+                    // Try next
+                }
+            }
+            if (ts.contains("T")) {
+                val timePart = ts.substringAfter("T")
+                if (timePart.length >= 5) {
+                    return timePart.substring(0, 5)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return "--"
+    }
+
+    private fun parseIsoTimestamp(ts: String?): Date {
+        if (ts.isNullOrEmpty()) return Date()
+        val formats = listOf(
+            "yyyy-MM-dd'T'HH:mm:ss.SSSXXX",
+            "yyyy-MM-dd'T'HH:mm:ss.SSS",
+            "yyyy-MM-dd'T'HH:mm:ss",
+            "yyyy-MM-dd HH:mm:ss"
+        )
+        for (fmt in formats) {
+            try {
+                val parser = SimpleDateFormat(fmt, Locale.getDefault())
+                if (ts.endsWith("Z")) {
+                    parser.timeZone = TimeZone.getTimeZone("UTC")
+                }
+                val date = parser.parse(ts)
+                if (date != null) return date
+            } catch (e: Exception) {
+                // Try next
+            }
+        }
+        return Date()
+    }
+
     override fun onDestroyView() {
         super.onDestroyView()
+        breakCountdownTimer?.cancel()
+        breakCountdownTimer = null
         _binding = null
     }
 }

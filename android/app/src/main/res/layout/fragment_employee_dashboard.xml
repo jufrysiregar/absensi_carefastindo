@@ -369,8 +369,106 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
+            <!-- Istirahat Countdown Card (Initially GONE) -->
+            <androidx.cardview.widget.CardView
+                android:id="@+id/cardBreakCountdown"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@color/white"
+                android:visibility="gone"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="20dp"
+                    android:gravity="center">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="⏰ ISTIRAHAT"
+                        android:textColor="#F59E0B"
+                        android:textStyle="bold"
+                        android:textSize="18sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Sisa Waktu:"
+                        android:textColor="@color/text_secondary_light"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <!-- Countdown text (e.g. 45m 30s) -->
+                    <TextView
+                        android:id="@+id/txtBreakCountdown"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="60m 00s"
+                        android:textColor="@color/text_primary_light"
+                        android:textStyle="bold"
+                        android:textSize="28sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <!-- Progress bar -->
+                    <ProgressBar
+                        android:id="@+id/progressBreak"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="8dp"
+                        android:progressTint="#F59E0B"
+                        android:max="3600"
+                        android:progress="3600"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Start & End times -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:gravity="center"
+                        android:layout_marginBottom="16dp">
+
+                        <TextView
+                            android:id="@+id/txtBreakStart"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Mulai: --"
+                            android:textColor="@color/text_secondary_light"
+                            android:textSize="13sp"
+                            android:layout_marginEnd="24dp" />
+
+                        <TextView
+                            android:id="@+id/txtBreakEnd"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Selesai: --"
+                            android:textColor="@color/text_secondary_light"
+                            android:textSize="13sp" />
+                    </LinearLayout>
+
+                    <!-- Kembali Bekerja Button (Red) -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnEndBreakEarly"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:text="Kembali Bekerja"
+                        android:textColor="@color/white"
+                        android:backgroundTint="#EF4444"
+                        app:cornerRadius="12dp"
+                        android:textStyle="bold" />
+
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
             <!-- Actions Panel -->
             <androidx.cardview.widget.CardView
+                android:id="@+id/cardActionsPanel"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 app:cardCornerRadius="16dp"
