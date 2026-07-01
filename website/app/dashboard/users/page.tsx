@@ -164,11 +164,13 @@ export default function ManagementEmployeePage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('users')
-        .select('id, name, email, role, nip, user_shifts(shift_id, shifts(name))')
+        .select('id, name, email, role, nip, user_shifts(shift_id, created_at, shifts(name))')
         .order('name')
 
       return (data ?? []).map((u: any) => {
-        const us = Array.isArray(u.user_shifts) ? u.user_shifts[0] : u.user_shifts
+        const usList = Array.isArray(u.user_shifts) ? u.user_shifts : (u.user_shifts ? [u.user_shifts] : [])
+        const sorted = [...usList].sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())
+        const us = sorted[0]
         return {
           id: u.id, 
           name: u.name, 
@@ -195,20 +197,35 @@ export default function ManagementEmployeePage() {
   const { data: history = [], isLoading: historyLoading } = useQuery<ShiftHistory[]>({
     queryKey: ['shiftHistory'],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('user_shifts')
-        .select('id, effective_date, created_at, users(name), shifts(name), old_shift_id')
+        .select('id, effective_date, created_at, user_id, users(name), shifts(name)')
         .order('created_at', { ascending: false })
         .limit(3)
 
-      return (data ?? []).map((h: any) => ({
-        id: h.id,
-        user_name: h.users?.name ?? '—',
-        old_shift: h.old_shift_id ?? '—',
-        new_shift: h.shifts?.name ?? '—',
-        effective_date: h.effective_date,
-        created_at: h.created_at,
+      if (error) throw error
+
+      const historyRows = await Promise.all((data ?? []).map(async (h: any) => {
+        const { data: prevShift } = await supabase
+          .from('user_shifts')
+          .select('shifts(name)')
+          .eq('user_id', h.user_id)
+          .lt('created_at', h.created_at)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+
+        return {
+          id: h.id,
+          user_name: h.users?.name ?? '—',
+          old_shift: (prevShift as any)?.shifts?.name ?? 'Tanpa Shift',
+          new_shift: h.shifts?.name ?? 'Tanpa Shift',
+          effective_date: h.effective_date,
+          created_at: h.created_at,
+        }
       }))
+
+      return historyRows
     }
   })
 
@@ -329,36 +346,17 @@ export default function ManagementEmployeePage() {
 
       if (userError) throw userError
 
-      // 2. Update user_shifts if shift changed
+      // 2. Insert new user_shifts row if shift changed (maintaining historical logs)
       if (editForm.shiftId !== editingUser.shift_id) {
-        const { data: existingShifts, error: fetchError } = await supabase
+        const { error: shiftError } = await supabase
           .from('user_shifts')
-          .select('id')
-          .eq('user_id', editingUser.id)
+          .insert({
+            user_id: editingUser.id,
+            shift_id: editForm.shiftId === 'none' || !editForm.shiftId ? null : editForm.shiftId,
+            effective_date: new Date().toISOString().split('T')[0]
+          })
 
-        if (fetchError) throw fetchError
-
-        if (existingShifts && existingShifts.length > 0) {
-          const { error: shiftError } = await supabase
-            .from('user_shifts')
-            .update({
-              shift_id: editForm.shiftId || null,
-              effective_date: new Date().toISOString().split('T')[0]
-            })
-            .eq('id', existingShifts[0].id)
-
-          if (shiftError) throw shiftError
-        } else {
-          const { error: shiftError } = await supabase
-            .from('user_shifts')
-            .insert({
-              user_id: editingUser.id,
-              shift_id: editForm.shiftId || null,
-              effective_date: new Date().toISOString().split('T')[0]
-            })
-
-          if (shiftError) throw shiftError
-        }
+        if (shiftError) throw shiftError
       }
 
       toast.success('Data karyawan berhasil diperbarui!')
@@ -399,34 +397,15 @@ export default function ManagementEmployeePage() {
   // Update shift mutation
   const updateShiftMutation = useMutation({
     mutationFn: async (payload: { userId: string; shiftId: string; effectiveDate: string }) => {
-      const { data: existingShifts, error: fetchError } = await supabase
+      const { error } = await supabase
         .from('user_shifts')
-        .select('id')
-        .eq('user_id', payload.userId)
+        .insert({
+          user_id: payload.userId,
+          shift_id: payload.shiftId === 'none' ? null : payload.shiftId,
+          effective_date: payload.effectiveDate,
+        })
 
-      if (fetchError) throw fetchError
-
-      if (existingShifts && existingShifts.length > 0) {
-        const { error } = await supabase
-          .from('user_shifts')
-          .update({
-            shift_id: payload.shiftId === 'none' ? null : payload.shiftId,
-            effective_date: payload.effectiveDate,
-          })
-          .eq('id', existingShifts[0].id)
-
-        if (error) throw error
-      } else {
-        const { error } = await supabase
-          .from('user_shifts')
-          .insert({
-            user_id: payload.userId,
-            shift_id: payload.shiftId === 'none' ? null : payload.shiftId,
-            effective_date: payload.effectiveDate,
-          })
-
-        if (error) throw error
-      }
+      if (error) throw error
     },
     onSuccess: () => {
       toast.success('Shift karyawan berhasil diperbarui!')
@@ -445,6 +424,17 @@ export default function ManagementEmployeePage() {
       toast.error('Isi semua kolom form terlebih dahulu!')
       return
     }
+
+    // Check if target shift is the same as the current shift
+    const selectedUser = users.find(u => u.id === shiftForm.userId)
+    const currentShiftId = selectedUser?.shift_id || ''
+    const targetShiftId = shiftForm.shiftId === 'none' ? '' : shiftForm.shiftId
+
+    if (currentShiftId === targetShiftId) {
+      toast.error('Gagal memperbarui shift: Karyawan sudah berada di shift tersebut! Perubahan shift tidak valid.')
+      return
+    }
+
     updateShiftMutation.mutate(shiftForm)
   }
 
