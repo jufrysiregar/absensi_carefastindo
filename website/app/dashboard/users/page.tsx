@@ -534,7 +534,9 @@ export default function ManagementEmployeePage() {
       case 'supervisor': return 'info'
       case 'leader': return 'warning'
       case 'cleaner':
-      case 'housekeeping': return 'success'
+      case 'housekeeping':
+      case 'gardener':
+      case 'gondola': return 'success'
       default: return 'outline'
     }
   }
