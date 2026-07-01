@@ -33,36 +33,20 @@
                     android:orientation="vertical"
                     android:padding="20dp">
 
+                    <!-- Clock Row -->
                     <RelativeLayout
                         android:layout_width="match_parent"
-                        android:layout_height="wrap_content">
+                        android:layout_height="wrap_content"
+                        android:layout_marginBottom="12dp">
 
-                        <LinearLayout
+                        <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:layout_toStartOf="@id/layoutClock"
-                            android:layout_alignParentStart="true"
-                            android:layout_marginEnd="16dp">
-
-                            <TextView
-                                android:id="@+id/txtEmployeeName"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Karyawan Carefastindo"
-                                android:textColor="@color/primary"
-                                android:textSize="20sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/txtEmployeeRole"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Pegawai - Shift Pagi"
-                                android:textColor="@color/text_secondary_light"
-                                android:textSize="14sp"
-                                android:layout_marginTop="4dp" />
-                        </LinearLayout>
+                            android:text="KARTU IDENTITAS"
+                            android:textColor="@color/primary"
+                            android:textStyle="bold"
+                            android:textSize="12sp"
+                            android:layout_centerVertical="true" />
 
                         <LinearLayout
                             android:id="@+id/layoutClock"
@@ -78,7 +62,7 @@
                                 android:layout_height="wrap_content"
                                 android:text="00:00:00"
                                 android:textColor="@color/text_primary_light"
-                                android:textSize="22sp"
+                                android:textSize="20sp"
                                 android:textStyle="bold" />
 
                             <TextView
@@ -90,6 +74,81 @@
                                 android:textSize="11sp" />
                         </LinearLayout>
                     </RelativeLayout>
+
+                    <!-- Divider -->
+                    <View
+                        android:layout_width="match_parent"
+                        android:layout_height="1dp"
+                        android:background="#E2E8F0"
+                        android:layout_marginBottom="12dp" />
+
+                    <!-- User Info Layout (2 Columns) -->
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:weightSum="2">
+
+                        <!-- LEFT Column -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="start">
+
+                            <TextView
+                                android:id="@+id/txtEmployeeName"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Karyawan Carefast"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="18sp"
+                                android:textStyle="bold"
+                                android:maxLines="2"
+                                android:ellipsize="end" />
+
+                            <TextView
+                                android:id="@+id/txtEmployeeNip"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="NIP: --"
+                                android:textColor="#64748B"
+                                android:textSize="14sp"
+                                android:layout_marginTop="4dp" />
+                        </LinearLayout>
+
+                        <!-- RIGHT Column -->
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical"
+                            android:gravity="end">
+
+                            <TextView
+                                android:id="@+id/txtEmployeeRole"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="Pegawai - Shift Pagi"
+                                android:textColor="@color/text_primary_light"
+                                android:textSize="14sp"
+                                android:textStyle="normal"
+                                android:gravity="end"
+                                android:maxLines="2"
+                                android:ellipsize="end" />
+
+                            <TextView
+                                android:id="@+id/txtEmployeeShiftTime"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="(07:00 - 15:00)"
+                                android:textColor="#94A3B8"
+                                android:textSize="12sp"
+                                android:layout_marginTop="4dp"
+                                android:gravity="end" />
+                        </LinearLayout>
+                    </LinearLayout>
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

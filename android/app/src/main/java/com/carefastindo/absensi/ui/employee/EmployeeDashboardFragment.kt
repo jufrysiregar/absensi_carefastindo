@@ -309,12 +309,18 @@ class EmployeeDashboardFragment : Fragment() {
                 // Update header text views
                 val txtEmployeeName = view.findViewById<android.widget.TextView>(R.id.txtEmployeeName)
                 val txtEmployeeRole = view.findViewById<android.widget.TextView>(R.id.txtEmployeeRole)
+                val txtEmployeeNip = view.findViewById<android.widget.TextView>(R.id.txtEmployeeNip)
+                val txtEmployeeShiftTime = view.findViewById<android.widget.TextView>(R.id.txtEmployeeShiftTime)
                 val txtLiveTime = view.findViewById<android.widget.TextView>(R.id.txtLiveTime)
                 val txtLiveDate = view.findViewById<android.widget.TextView>(R.id.txtLiveDate)
 
                 state.user?.let { u ->
                     txtEmployeeName?.text = u.name
-                    txtEmployeeRole?.text = "${u.role} - Shift ${u.shiftType?.capitalize() ?: "Default"}"
+                    txtEmployeeRole?.text = "${u.position ?: u.role} - ${u.shiftType ?: "-"}"
+                    txtEmployeeNip?.text = "NIP: ${u.nip ?: "-"}"
+                    
+                    val (masuk, pulang) = ShiftHelper.getShiftTimes(u.role, u.shiftType)
+                    txtEmployeeShiftTime?.text = "($masuk - $pulang)"
                 }
 
                 txtLiveTime?.text = state.liveTime

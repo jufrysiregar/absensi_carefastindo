@@ -18,8 +18,14 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
 
 interface Announcement {
-  id: string; title: string; content: string; target: string
-  created_at: string; read_count: number; total_target: number
+  id: string
+  title: string
+  content: string
+  target_role: string
+  created_at: string
+  is_active: boolean
+  read_count: number
+  total_target: number
 }
 
 const ROLES = ['All', 'SPV', 'Leader', 'Cleaner', 'Housekeeping', 'Gardener', 'Gondola']
@@ -27,7 +33,7 @@ const ROLES = ['All', 'SPV', 'Leader', 'Cleaner', 'Housekeeping', 'Gardener', 'G
 export default function AnnouncementsPage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
-  const [form, setForm] = useState({ title: '', content: '', target: 'All' })
+  const [form, setForm] = useState({ title: '', content: '', target_role: 'All' })
   const [editId, setEditId] = useState<string | null>(null)
 
   // Realtime subscription
@@ -37,6 +43,9 @@ export default function AnnouncementsPage() {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'announcements' }, () => {
         queryClient.invalidateQueries({ queryKey: ['announcements'] })
       })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'announcement_reads' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['announcements'] })
+      })
       .subscribe()
 
     return () => {
@@ -44,53 +53,82 @@ export default function AnnouncementsPage() {
     }
   }, [supabase, queryClient])
 
-  // Get announcements
+  // Get announcements with dynamic target and reads count calculations
   const { data: list = [], isLoading } = useQuery<Announcement[]>({
     queryKey: ['announcements'],
     queryFn: async () => {
-      const { data } = await supabase
+      // 1. Fetch announcements
+      const { data: announcementsData } = await supabase
         .from('announcements')
-        .select('id, title, content, target, created_at, read_count, total_target')
+        .select('id, title, content, target_role, created_at, is_active')
         .order('created_at', { ascending: false })
-      return data ?? []
+
+      if (!announcementsData) return []
+
+      // 2. Fetch all announcement reads
+      const { data: readsData } = await supabase
+        .from('announcement_reads')
+        .select('announcement_id')
+
+      // 3. Fetch all users to calculate total targets
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, role')
+
+      return announcementsData.map((a: any) => {
+        const reads = (readsData ?? []).filter((r: any) => r.announcement_id === a.id).length
+        
+        let total = 0
+        if (a.target_role === 'All') {
+          total = (usersData ?? []).length
+        } else {
+          total = (usersData ?? []).filter(
+            (u: any) => u.role?.toLowerCase() === a.target_role?.toLowerCase()
+          ).length
+        }
+
+        return {
+          id: a.id,
+          title: a.title,
+          content: a.content,
+          target_role: a.target_role,
+          created_at: a.created_at,
+          is_active: a.is_active,
+          read_count: reads,
+          total_target: total
+        }
+      })
     }
   })
 
   // Mutation for sending/updating announcement
   const sendAnnouncementMutation = useMutation({
-    mutationFn: async (payload: { title: string; content: string; target: string; id?: string }) => {
+    mutationFn: async (payload: { title: string; content: string; target_role: string; id?: string }) => {
       if (payload.id) {
         // Update
         const { error } = await supabase
           .from('announcements')
-          .update({ title: payload.title, content: payload.content, target: payload.target })
+          .update({ 
+            title: payload.title, 
+            content: payload.content, 
+            target_role: payload.target_role 
+          })
           .eq('id', payload.id)
         if (error) throw error
       } else {
         // Insert
-        let total = 0
-        if (payload.target === 'All') {
-          const { count } = await supabase.from('users').select('id', { count: 'exact', head: true })
-          total = count ?? 0
-        } else {
-          const { count } = await supabase.from('users').select('id', { count: 'exact', head: true }).eq('role', payload.target.toLowerCase())
-          total = count ?? 0
-        }
-
         const { error } = await supabase.from('announcements').insert({
           title: payload.title,
           content: payload.content,
-          target: payload.target,
-          read_count: 0,
-          total_target: total,
-          created_at: new Date().toISOString(),
+          target_role: payload.target_role,
+          is_active: true
         })
         if (error) throw error
       }
     },
     onSuccess: () => {
       toast.success(editId ? 'Pengumuman berhasil diupdate!' : 'Pengumuman berhasil dikirim!')
-      setForm({ title: '', content: '', target: 'All' })
+      setForm({ title: '', content: '', target_role: 'All' })
       setEditId(null)
       queryClient.invalidateQueries({ queryKey: ['announcements'] })
     },
@@ -125,7 +163,7 @@ export default function AnnouncementsPage() {
 
   function startEdit(a: Announcement) {
     setEditId(a.id)
-    setForm({ title: a.title, content: a.content, target: a.target })
+    setForm({ title: a.title, content: a.content, target_role: a.target_role })
   }
 
   return (
@@ -151,7 +189,7 @@ export default function AnnouncementsPage() {
                 value={form.title}
                 onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
                 placeholder="Contoh: Info Jadwal Libur Lebaran"
-                className="bg-white"
+                className="bg-white text-slate-800"
               />
             </div>
             
@@ -163,15 +201,15 @@ export default function AnnouncementsPage() {
                 onChange={e => setForm(f => ({ ...f, content: e.target.value }))}
                 placeholder="Detail informasi pengumuman..."
                 rows={4}
-                className="bg-white resize-none"
+                className="bg-white resize-none text-slate-800"
               />
             </div>
             
             <div className="flex flex-col sm:flex-row gap-4 items-end justify-between pt-2">
               <div className="space-y-2 w-full sm:w-1/3">
-                <Label htmlFor="target">Target Role</Label>
-                <Select value={form.target} onValueChange={v => setForm(f => ({ ...f, target: v as string }))}>
-                  <SelectTrigger id="target" className="bg-white">
+                <Label htmlFor="target_role">Target Role</Label>
+                <Select value={form.target_role} onValueChange={v => setForm(f => ({ ...f, target_role: v as string }))}>
+                  <SelectTrigger id="target_role" className="bg-white text-slate-800">
                     <SelectValue placeholder="Pilih Target" />
                   </SelectTrigger>
                   <SelectContent>
@@ -185,7 +223,7 @@ export default function AnnouncementsPage() {
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={() => { setEditId(null); setForm({ title: '', content: '', target: 'All' }) }}
+                    onClick={() => { setEditId(null); setForm({ title: '', content: '', target_role: 'All' }) }}
                     className="w-full sm:w-auto"
                   >
                     <X className="w-4 h-4 mr-2" /> Batal
@@ -194,7 +232,7 @@ export default function AnnouncementsPage() {
                 <Button
                   type="submit"
                   disabled={sendAnnouncementMutation.isPending}
-                  className={`w-full sm:w-auto ${editId ? 'bg-amber-500 hover:bg-amber-600' : ''}`}
+                  className={`w-full sm:w-auto ${editId ? 'bg-amber-500 hover:bg-amber-600 text-white' : 'bg-blue-600 hover:bg-blue-700 text-white'}`}
                 >
                   {sendAnnouncementMutation.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Send className="w-4 h-4 mr-2" />}
                   {editId ? 'Update Pengumuman' : 'Kirim Pengumuman'}
@@ -246,7 +284,7 @@ export default function AnnouncementsPage() {
                       </TableCell>
                       <TableCell>
                         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                          <Users className="w-3 h-3 mr-1" />{a.target}
+                          <Users className="w-3 h-3 mr-1" />{a.target_role}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-500 text-sm whitespace-nowrap">
@@ -288,3 +326,4 @@ export default function AnnouncementsPage() {
     </motion.div>
   )
 }
+

@@ -80,6 +80,11 @@
             android:exported="false"
             android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
 
+        <activity
+            android:name=".ui.employee.DaftarPengumumanActivity"
+            android:exported="false"
+            android:theme="@style/Theme.CarefastindoAbsensi.NoActionBar" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"
