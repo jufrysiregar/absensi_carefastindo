@@ -331,7 +331,7 @@ export default function UsersPage() {
                 type="text"
                 required
                 maxLength={6}
-                placeholder="cth. 411012"
+                placeholder="cth. 123456"
                 value={addUserForm.nip}
                 onChange={e => setAddUserForm(f => ({ ...f, nip: e.target.value }))}
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 h-10 text-slate-800"
@@ -369,7 +369,7 @@ export default function UsersPage() {
               </select>
             </div>
 
-            <div className="md:col-span-3 flex justify-center mt-2">
+            <div className="md:col-span-3 flex justify-end mt-2">
               <Button
                 type="submit"
                 disabled={addingUser}
@@ -382,7 +382,6 @@ export default function UsersPage() {
                   </>
                 ) : (
                   <>
-                    <Plus className="w-4 h-4 mr-2" />
                     Tambah Karyawan
                   </>
                 )}
