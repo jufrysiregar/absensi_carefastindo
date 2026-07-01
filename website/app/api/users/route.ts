@@ -80,6 +80,24 @@ export async function DELETE(request: Request) {
       return NextResponse.json({ error: 'User ID wajib disertakan!' }, { status: 400 })
     }
 
+    // Block deletion if the user is a superadmin
+    const { data: userRecord, error: userFetchError } = await supabaseAdmin
+      .from('users')
+      .select('role')
+      .eq('id', userId)
+      .single()
+
+    if (userFetchError) {
+      return NextResponse.json({ error: 'DB Fetch: ' + userFetchError.message }, { status: 400 })
+    }
+
+    if (userRecord && userRecord.role.toLowerCase() === 'superadmin') {
+      return NextResponse.json(
+        { error: 'Super Admin tidak dapat dihapus' },
+        { status: 403 }
+      )
+    }
+
     // 1. Delete from Supabase Auth
     const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(userId)
     if (authError) {

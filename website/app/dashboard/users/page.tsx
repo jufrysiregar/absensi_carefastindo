@@ -479,36 +479,42 @@ export default function UsersPage() {
                     <TableRow key={u.id} className="bg-white border-b border-slate-100 hover:bg-slate-50/50">
                       <TableCell className="font-semibold text-slate-700 py-3 pl-4">{u.name}</TableCell>
                       <TableCell className="text-slate-500 text-sm py-3">{u.email}</TableCell>
-                      <TableCell className="text-slate-600 font-mono text-sm py-3">{u.nip}</TableCell>
+                      <TableCell className="text-slate-600 font-mono text-sm py-3">
+                        {u.role.toLowerCase() === 'superadmin' ? 'N/A' : u.nip}
+                      </TableCell>
                       <TableCell className="py-3">
                         <Badge variant={getRoleVariant(u.role) as any} className="capitalize font-medium">
                           {u.role === 'spv' ? 'Shift Kantor (SPV)' : u.role}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-600 font-medium py-3">
-                        {u.current_shift}
+                        {u.role.toLowerCase() === 'superadmin' ? 'N/A' : u.current_shift}
                       </TableCell>
                       <TableCell className="py-3 pr-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 px-2.5 text-blue-600 border-blue-200 hover:bg-blue-50"
-                            onClick={() => openEditModal(u)}
-                          >
-                            <Edit2 className="w-3.5 h-3.5 mr-1" />
-                            Edit
-                          </Button>
-                          <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 px-2.5 text-red-600 border-red-200 hover:bg-red-50"
-                            onClick={() => setDeletingUserId(u.id)}
-                          >
-                            <Trash2 className="w-3.5 h-3.5 mr-1" />
-                            Hapus
-                          </Button>
-                        </div>
+                        {u.role.toLowerCase() === 'superadmin' ? (
+                          <span className="text-slate-400 font-medium text-sm">Permanent Data</span>
+                        ) : (
+                          <div className="flex items-center justify-center gap-2">
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 px-2.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                              onClick={() => openEditModal(u)}
+                            >
+                              <Edit2 className="w-3.5 h-3.5 mr-1" />
+                              Edit
+                            </Button>
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 px-2.5 text-red-600 border-red-200 hover:bg-red-50"
+                              onClick={() => setDeletingUserId(u.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5 mr-1" />
+                              Hapus
+                            </Button>
+                          </div>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))
