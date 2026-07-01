@@ -10,8 +10,7 @@ import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard/attendance', label: 'Attendance' },
-  { href: '/dashboard/users', label: 'Users & Shifts' },
+  { href: '/dashboard/users', label: 'Management Employee' },
   { href: '/dashboard/qr-code', label: 'QR Generator' },
   { href: '/dashboard/announcements', label: 'Announcements' },
   { href: '/dashboard/reports', label: 'Reports' },
