@@ -94,7 +94,7 @@ export default function ReportsPage() {
     try {
       const { data, error } = await supabase
         .from('attendance')
-        .select('status, check_in, check_out, users(name), user_shifts(shifts(name))')
+        .select('status, check_in_time, check_out_time, users(name), user_shifts(shifts(name))')
         .eq('date', dailyDate)
 
       if (error) throw error
@@ -102,8 +102,8 @@ export default function ReportsPage() {
       const mapped: DailyReportRow[] = (data || []).map((r: any) => ({
         name: r.users?.name || '—',
         shift: r.user_shifts?.shifts?.name || '—',
-        check_in: r.check_in ? formatTime(r.check_in) : '—',
-        check_out: r.check_out ? formatTime(r.check_out) : '—',
+        check_in: r.check_in_time ? formatTime(r.check_in_time) : '—',
+        check_out: r.check_out_time ? formatTime(r.check_out_time) : '—',
         status: r.status || 'alfa'
       }))
 

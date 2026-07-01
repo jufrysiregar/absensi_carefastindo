@@ -235,9 +235,9 @@ export default function ManagementEmployeePage() {
     queryFn: async () => {
       let query = supabase
         .from('attendance')
-        .select('id, status, check_in, check_out, break_start, break_end, date, selfie_url, location, notes, users(name), user_shifts(shifts(id, name))', { count: 'exact' })
+        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, users(name), user_shifts(shifts(id, name))', { count: 'exact' })
         .order('date', { ascending: false })
-        .order('check_in', { ascending: false })
+        .order('check_in_time', { ascending: false })
 
       if (attFilterDate) query = query.eq('date', attFilterDate)
       if (attFilterStatus !== 'all') query = query.eq('status', attFilterStatus)
@@ -250,14 +250,14 @@ export default function ManagementEmployeePage() {
         user_name: r.users?.name ?? '—',
         shift_name: r.user_shifts?.shifts?.name ?? '—',
         date: r.date,
-        check_in: r.check_in,
-        check_out: r.check_out,
+        check_in: r.check_in_time,
+        check_out: r.check_out_time,
         break_start: r.break_start,
         break_end: r.break_end,
         status: r.status,
         selfie_url: r.selfie_url,
-        location: r.location,
-        notes: r.notes,
+        location: r.location_lat && r.location_lng ? `${r.location_lat}, ${r.location_lng}` : '—',
+        notes: r.note,
       }))
 
       if (debouncedAttSearch) {

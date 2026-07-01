@@ -76,7 +76,7 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('attendance')
-        .select('id, status, check_in, date, users(name), user_shifts(shifts(name))')
+        .select('id, status, check_in_time, date, users(name), user_shifts(shifts(name))')
         .order('created_at', { ascending: false })
         .limit(5)
 
@@ -85,7 +85,7 @@ export default function DashboardPage() {
         user_name: r.users?.name ?? '—',
         shift_name: r.user_shifts?.shifts?.name ?? '—',
         date: r.date,
-        check_in: r.check_in,
+        check_in: r.check_in_time,
         status: r.status,
       }))
     },
