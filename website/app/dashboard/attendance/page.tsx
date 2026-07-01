@@ -26,7 +26,34 @@ if (typeof window !== 'undefined' && pdfFonts && (pdfFonts as any).pdfMake) {
 interface AttendanceRow {
   id: string; user_name: string; shift_name: string
   date: string; check_in: string | null; check_out: string | null
+  break_start: string | null; break_end: string | null
   status: string; selfie_url: string | null; location: string | null; notes: string | null
+}
+
+function calculateBreakDuration(start: string | null, end: string | null): { text: string; isWarning: boolean } {
+  if (!start || !end) return { text: '—', isWarning: false }
+  try {
+    const s = new Date(start)
+    const e = new Date(end)
+    const diffMs = e.getTime() - s.getTime()
+    if (diffMs <= 0) return { text: '—', isWarning: false }
+    const diffMins = Math.round(diffMs / 60000)
+    
+    const hrs = Math.floor(diffMins / 60)
+    const mins = diffMins % 60
+    let durationText = ''
+    if (hrs > 0) {
+      durationText = `${hrs} jam ${mins} menit`
+    } else {
+      durationText = `${mins} menit`
+    }
+    return {
+      text: durationText,
+      isWarning: diffMins > 60
+    }
+  } catch (err) {
+    return { text: '—', isWarning: false }
+  }
 }
 
 const PAGE_SIZE = 10
@@ -70,7 +97,7 @@ export default function AttendancePage() {
     queryFn: async () => {
       let query = supabase
         .from('attendance')
-        .select('id, status, check_in, check_out, date, selfie_url, location, notes, users(name), user_shifts(shifts(id, name))', { count: 'exact' })
+        .select('id, status, check_in, check_out, break_start, break_end, date, selfie_url, location, notes, users(name), user_shifts(shifts(id, name))', { count: 'exact' })
         .order('date', { ascending: false })
         .order('check_in', { ascending: false })
 
@@ -87,6 +114,8 @@ export default function AttendancePage() {
         date: r.date,
         check_in: r.check_in,
         check_out: r.check_out,
+        break_start: r.break_start,
+        break_end: r.break_end,
         status: r.status,
         selfie_url: r.selfie_url,
         location: r.location,
@@ -118,12 +147,18 @@ export default function AttendancePage() {
       ))
       return
     }
-    const ws = XLSX.utils.json_to_sheet(rows.map(r => ({
-      Nama: r.user_name, Shift: r.shift_name, Tanggal: r.date,
-      'Check-in': r.check_in ? formatTime(r.check_in) : '-',
-      'Check-out': r.check_out ? formatTime(r.check_out) : '-',
-      Status: r.status,
-    })))
+    const ws = XLSX.utils.json_to_sheet(rows.map(r => {
+      const dur = calculateBreakDuration(r.break_start, r.break_end)
+      return {
+        Nama: r.user_name, Shift: r.shift_name, Tanggal: r.date,
+        'Check-in': r.check_in ? formatTime(r.check_in) : '-',
+        'Istirahat Mulai': r.break_start ? formatTime(r.break_start) : '-',
+        'Istirahat Selesai': r.break_end ? formatTime(r.break_end) : '-',
+        'Durasi Istirahat': dur.text,
+        'Check-out': r.check_out ? formatTime(r.check_out) : '-',
+        Status: r.status,
+      }
+    }))
     const wb = XLSX.utils.book_new()
     XLSX.utils.book_append_sheet(wb, ws, 'Attendance')
     XLSX.writeFile(wb, `attendance_${filterDate || 'all'}.xlsx`)
@@ -148,13 +183,16 @@ export default function AttendancePage() {
           style: 'tableExample',
           table: {
             headerRows: 1,
-            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto'],
+            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
             body: [
               [
                 { text: 'Nama', style: 'tableHeader' },
                 { text: 'Shift', style: 'tableHeader' },
                 { text: 'Tanggal', style: 'tableHeader' },
                 { text: 'Check-in', style: 'tableHeader' },
+                { text: 'Istirahat Mulai', style: 'tableHeader' },
+                { text: 'Istirahat Selesai', style: 'tableHeader' },
+                { text: 'Durasi', style: 'tableHeader' },
                 { text: 'Check-out', style: 'tableHeader' },
                 { text: 'Status', style: 'tableHeader' }
               ],
@@ -163,6 +201,9 @@ export default function AttendancePage() {
                 r.shift_name,
                 r.date,
                 r.check_in ? formatTime(r.check_in) : '-',
+                r.break_start ? formatTime(r.break_start) : '-',
+                r.break_end ? formatTime(r.break_end) : '-',
+                calculateBreakDuration(r.break_start, r.break_end).text,
                 r.check_out ? formatTime(r.check_out) : '-',
                 r.status
               ])
@@ -267,6 +308,9 @@ export default function AttendancePage() {
                 <TableHead>Shift</TableHead>
                 <TableHead>Tanggal</TableHead>
                 <TableHead>Check-in</TableHead>
+                <TableHead>Istirahat Mulai</TableHead>
+                <TableHead>Istirahat Selesai</TableHead>
+                <TableHead>Durasi Istirahat</TableHead>
                 <TableHead>Check-out</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead className="text-right">Aksi</TableHead>
@@ -276,14 +320,14 @@ export default function AttendancePage() {
               {isLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 8 }).map((_, j) => (
+                    {Array.from({ length: 11 }).map((_, j) => (
                       <TableCell key={j}><Skeleton className="h-5 w-full max-w-[100px]" /></TableCell>
                     ))}
                   </TableRow>
                 ))
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={8} className="h-32 text-center text-slate-400">
+                  <TableCell colSpan={11} className="h-32 text-center text-slate-400">
                     Tidak ada data ditemukan
                   </TableCell>
                 </TableRow>
@@ -295,6 +339,18 @@ export default function AttendancePage() {
                     <TableCell className="text-slate-500">{r.shift_name}</TableCell>
                     <TableCell className="text-slate-500">{formatDate(r.date)}</TableCell>
                     <TableCell className="text-slate-500">{r.check_in ? formatTime(r.check_in) : '—'}</TableCell>
+                    <TableCell className="text-slate-500">{r.break_start ? formatTime(r.break_start) : '—'}</TableCell>
+                    <TableCell className="text-slate-500">{r.break_end ? formatTime(r.break_end) : '—'}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const dur = calculateBreakDuration(r.break_start, r.break_end)
+                        return (
+                          <span className={dur.isWarning ? "text-red-600 font-semibold" : "text-slate-500"}>
+                            {dur.text}
+                          </span>
+                        )
+                      })()}
+                    </TableCell>
                     <TableCell className="text-slate-500">{r.check_out ? formatTime(r.check_out) : '—'}</TableCell>
                     <TableCell>
                       <Badge variant={r.status === 'hadir' ? 'success' : r.status === 'izin' ? 'warning' : r.status === 'sakit' ? 'destructive' : 'default'}>
@@ -373,6 +429,12 @@ export default function AttendancePage() {
                   <span className="text-slate-500">Waktu</span>
                   <span className="font-medium text-slate-800">
                     {selected.check_in ? formatTime(selected.check_in) : '--:--'} s/d {selected.check_out ? formatTime(selected.check_out) : '--:--'}
+                  </span>
+
+                  <span className="text-slate-500">Istirahat</span>
+                  <span className="font-medium text-slate-800 font-mono">
+                    {selected.break_start ? formatTime(selected.break_start) : '--:--'} s/d {selected.break_end ? formatTime(selected.break_end) : '--:--'}
+                    {selected.break_start && selected.break_end ? ` (${calculateBreakDuration(selected.break_start, selected.break_end).text})` : ''}
                   </span>
                   
                   <span className="text-slate-500">Status</span>
