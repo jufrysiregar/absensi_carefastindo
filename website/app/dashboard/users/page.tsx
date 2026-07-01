@@ -281,7 +281,7 @@ export default function UsersPage() {
       </div>
 
       {/* A. FITUR ADD USER (Form Tambah Karyawan Baru) */}
-      <Card className="shadow-sm border-blue-100 bg-blue-50/20">
+      <Card className="shadow-sm">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             Tambah Karyawan Baru
