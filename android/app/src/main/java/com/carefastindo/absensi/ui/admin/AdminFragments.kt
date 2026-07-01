@@ -332,8 +332,8 @@ class TabRekapFragment : Fragment() {
             if (selectedShift == "Semua") {
                 true
             } else {
-                if (selectedShift.contains("Kantor", ignoreCase = true) || selectedShift.contains("SPV", ignoreCase = true)) {
-                    item.user.role.equals("SPV", ignoreCase = true) || item.user.shiftType?.lowercase()?.contains("kantor") == true
+                if (selectedShift.contains("Kantor", ignoreCase = true) || selectedShift.contains("Supervisor", ignoreCase = true)) {
+                    item.user.role.equals("supervisor", ignoreCase = true) || item.user.shiftType?.lowercase()?.contains("kantor") == true
                 } else {
                     val cleanSel = selectedShift.lowercase()
                     val cleanType = item.user.shiftType?.lowercase() ?: ""
@@ -368,7 +368,7 @@ class TabRekapFragment : Fragment() {
                 item.note = "Dihadirkan Massal"
                 
                 // Set default times based on shift
-                if (item.user.role.equals("SPV", ignoreCase = true)) {
+                if (item.user.role.equals("supervisor", ignoreCase = true)) {
                     item.checkInTime = "08:00:00"
                     item.checkOutTime = "17:00:00"
                 } else {
@@ -823,7 +823,7 @@ class TabEmployeeCrudFragment : Fragment() {
         val spinShift = dialogView.findViewById<Spinner>(R.id.spinShift)
 
         // Dropdown setup
-        val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "SPV")
+        val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "Supervisor")
         spinRole.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, roles)
 
         val shifts = if (ShiftHelper.cachedShifts.isNotEmpty()) {
@@ -835,7 +835,7 @@ class TabEmployeeCrudFragment : Fragment() {
 
         spinRole.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                if (roles[pos] == "SPV") {
+                if (roles[pos] == "Supervisor") {
                     spinShift.visibility = View.GONE
                 } else {
                     spinShift.visibility = View.VISIBLE
@@ -854,7 +854,7 @@ class TabEmployeeCrudFragment : Fragment() {
                 val email = edtEmail.text.toString().trim()
                 val password = edtPassword.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
-                val shift = if (role == "SPV") "Shift Kantor" else spinShift.selectedItem.toString()
+                val shift = if (role == "Supervisor") "Shift Kantor" else spinShift.selectedItem.toString()
 
                 if (employeeCode.isEmpty() || name.isEmpty() || email.isEmpty() || password.isEmpty()) {
                     Toast.makeText(context, "Mohon lengkapi semua bidang!", Toast.LENGTH_SHORT).show()
@@ -925,7 +925,7 @@ class TabEmployeeCrudFragment : Fragment() {
         edtEmail.isEnabled = false // Email cannot be modified
         edtPassword.visibility = View.GONE // Password modified via Reset password button
 
-        val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "SPV")
+        val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "Supervisor")
         spinRole.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, roles)
         spinRole.setSelection(roles.indexOf(user.role))
 
@@ -942,7 +942,7 @@ class TabEmployeeCrudFragment : Fragment() {
 
         spinRole.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                if (roles[pos] == "SPV") {
+                if (roles[pos] == "Supervisor") {
                     spinShift.visibility = View.GONE
                 } else {
                     spinShift.visibility = View.VISIBLE
@@ -959,7 +959,7 @@ class TabEmployeeCrudFragment : Fragment() {
                 val employeeCode = edtEmployeeCode.text.toString().trim()
                 val name = edtName.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
-                val shift = if (role == "SPV") "Shift Kantor" else spinShift.selectedItem.toString()
+                val shift = if (role == "Supervisor") "Shift Kantor" else spinShift.selectedItem.toString()
 
                 if (employeeCode.isEmpty() || name.isEmpty()) {
                     Toast.makeText(context, "ID Pegawai dan Nama wajib diisi!", Toast.LENGTH_SHORT).show()

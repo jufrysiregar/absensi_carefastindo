@@ -79,7 +79,7 @@ class LoginActivity : AppCompatActivity() {
     }
 
     private fun navigateToDashboard(role: String) {
-        val intent = if (role.equals("superadmin", ignoreCase = true) || role.equals("SPV", ignoreCase = true)) {
+        val intent = if (role.equals("superadmin", ignoreCase = true) || role.equals("supervisor", ignoreCase = true)) {
             Intent(this, AdminMainActivity::class.java)
         } else {
             Intent(this, EmployeeMainActivity::class.java)

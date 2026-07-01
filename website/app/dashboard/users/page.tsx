@@ -526,12 +526,12 @@ export default function ManagementEmployeePage() {
     return matchSearch && matchRole
   })
 
-  const roles = ['all', 'superadmin', 'spv', 'leader', 'cleaner', 'housekeeping', 'gardener', 'gondola']
+  const roles = ['all', 'superadmin', 'supervisor', 'leader', 'cleaner', 'housekeeping', 'gardener', 'gondola']
 
   const getRoleVariant = (role: string) => {
     switch (role.toLowerCase()) {
       case 'superadmin': return 'default'
-      case 'spv': return 'info'
+      case 'supervisor': return 'info'
       case 'leader': return 'warning'
       case 'cleaner':
       case 'housekeeping': return 'success'
@@ -634,7 +634,7 @@ export default function ManagementEmployeePage() {
                       </TableCell>
                       <TableCell className="py-3">
                         <Badge variant={getRoleVariant(u.role) as any} className="capitalize font-medium">
-                          {u.role === 'spv' ? 'SPV' : u.role}
+                          {u.role === 'supervisor' ? 'Supervisor' : u.role}
                         </Badge>
                       </TableCell>
                       <TableCell className="text-slate-600 font-medium py-3">
@@ -1048,7 +1048,7 @@ export default function ManagementEmployeePage() {
                       onChange={e => setAddUserForm(f => ({ ...f, role: e.target.value }))}
                       className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10 capitalize"
                     >
-                      <option value="spv">SPV</option>
+                      <option value="supervisor">Supervisor</option>
                       <option value="leader">Leader</option>
                       <option value="cleaner">Cleaner</option>
                       <option value="housekeeping">Housekeeping</option>
@@ -1158,7 +1158,7 @@ export default function ManagementEmployeePage() {
                     onChange={e => setEditForm(f => ({ ...f, role: e.target.value }))}
                     className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 capitalize"
                   >
-                    <option value="spv">SPV</option>
+                    <option value="supervisor">Supervisor</option>
                     <option value="leader">Leader</option>
                     <option value="cleaner">Cleaner</option>
                     <option value="housekeeping">Housekeeping</option>

@@ -28,7 +28,7 @@ interface Announcement {
   total_target: number
 }
 
-const ROLES = ['All', 'SPV', 'Leader', 'Cleaner', 'Housekeeping', 'Gardener', 'Gondola']
+const ROLES = ['All', 'Supervisor', 'Leader', 'Cleaner', 'Housekeeping', 'Gardener', 'Gondola']
 
 export default function AnnouncementsPage() {
   const supabase = createClient()

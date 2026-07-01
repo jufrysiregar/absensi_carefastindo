@@ -53,7 +53,7 @@ class SplashActivity : AppCompatActivity() {
                         // Load shifts configuration dynamically from database
                         com.carefastindo.absensi.utils.ShiftHelper.loadShifts()
 
-                        if (user.role.equals("superadmin", ignoreCase = true) || user.role.equals("SPV", ignoreCase = true)) {
+                        if (user.role.equals("superadmin", ignoreCase = true) || user.role.equals("supervisor", ignoreCase = true)) {
                             startActivity(Intent(this@SplashActivity, AdminMainActivity::class.java))
                         } else {
                             startActivity(Intent(this@SplashActivity, EmployeeMainActivity::class.java))

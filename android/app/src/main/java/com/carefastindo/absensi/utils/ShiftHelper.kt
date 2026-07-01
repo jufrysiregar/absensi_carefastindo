@@ -24,7 +24,7 @@ object ShiftHelper {
     }
 
     // Roles
-    const val ROLE_SPV = "SPV"
+    const val ROLE_SPV = "supervisor"
     const val ROLE_LEADER = "Leader"
     const val ROLE_CLEANER = "Cleaner"
     const val ROLE_HOUSEKEEPING = "Housekeeping"
@@ -58,7 +58,7 @@ object ShiftHelper {
             clean == "sore" || clean == "shift 2" -> Pair("15:00", "23:00")
             clean == "malam" || clean == "shift 3" -> Pair("23:00", "07:00")
             clean == "shift kantor" || clean == "kantor" -> Pair("08:00", "17:00")
-            role == ROLE_SPV || role.equals("SPV", ignoreCase = true) || role.equals("Kantor", ignoreCase = true) -> Pair("08:00", "17:00")
+            role == ROLE_SPV || role.equals("supervisor", ignoreCase = true) || role.equals("Kantor", ignoreCase = true) -> Pair("08:00", "17:00")
             else -> Pair("08:00", "17:00")
         }
     }
@@ -85,7 +85,7 @@ object ShiftHelper {
         val clean = shiftType?.lowercase()
         
         val isNightShift = clean == "malam" || clean == "shift 3"
-        val isSpvOrOffice = role == ROLE_SPV || role.equals("SPV", ignoreCase = true) || role.equals("Kantor", ignoreCase = true)
+        val isSpvOrOffice = role == ROLE_SPV || role.equals("supervisor", ignoreCase = true) || role.equals("Kantor", ignoreCase = true)
         
         if (!isSpvOrOffice && isNightShift) {
             val hour = cal.get(Calendar.HOUR_OF_DAY)
@@ -175,7 +175,7 @@ object ShiftHelper {
 
     /**
      * Break active: 5 minutes before to 10 minutes after breakStart.
-     * SPV is manual and can be done anytime.
+     * Supervisor is manual and can be done anytime.
      */
     fun isBreakWindowActive(role: String, breakStartStr: String?): Boolean {
         if (role == ROLE_SPV) return true

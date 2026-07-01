@@ -58,7 +58,7 @@ export function getStatusIcon(status: string) {
 export function getRoleBadgeClass(role: string) {
   switch (role?.toLowerCase()) {
     case 'superadmin': return 'bg-blue-100 text-blue-700 border-blue-200'
-    case 'spv': return 'bg-purple-100 text-purple-700 border-purple-200'
+    case 'supervisor': return 'bg-purple-100 text-purple-700 border-purple-200'
     case 'leader': return 'bg-indigo-100 text-indigo-700 border-indigo-200'
     case 'cleaner': return 'bg-green-100 text-green-700 border-green-200'
     case 'housekeeping': return 'bg-teal-100 text-teal-700 border-teal-200'
