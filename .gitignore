@@ -1,0 +1,58 @@
+# Windows / OS files
+Thumbs.db
+db.json
+Desktop.ini
+.DS_Store
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Node.js / Web dependencies
+**/node_modules/
+**/.pnp
+**/.pnp.js
+
+# Next.js Build Output
+**/out/
+**/.next/
+**/dist/
+
+# IDE / Editor configurations (Termasuk folder VS Code settings)
+.idea/
+.project
+.classpath
+.settings/
+*.sublime-project
+*.sublime-workspace
+.vscode/
+
+# File Kunci & Kredensial Sensitif (SANGAT KRUSIAL TERHADAP KEBOCORAN DATA)
+**/.env
+**/.env.local
+**/.env.development.local
+**/.env.test.local
+**/.env.production.local
+**/*.pem
+**/*.key
+**/*.pub
+**/credential.txt
+**/credentials.txt
+**/local.properties
+
+# Android build outputs & Gradle configurations
+**/build/
+**/.gradle/
+**/.navigation/
+**/captures/
+*.apk
+*.aar
+*.ap_
+*.der
+*.keystore
+*.jks

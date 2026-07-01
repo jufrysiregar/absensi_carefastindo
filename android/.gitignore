@@ -1,0 +1,28 @@
+# Built metadata
+*.iml
+.gradle
+/local.properties
+/.idea/workspace.xml
+/.idea/caches
+/.idea/libraries
+/.idea/modules.xml
+/.idea/navigatableFiles.xml
+/captures
+.externalNativeBuild
+.cxx
+/slicer
+.DS_Store
+
+# Local properties & keystores (SANGAT KRUSIAL - KREDENSIAL DEVELOPER)
+local.properties
+*.keystore
+*.jks
+credential.txt
+credentials.txt
+
+# Output files
+/build
+/captures
+*.apk
+*.ap_
+*.aar
