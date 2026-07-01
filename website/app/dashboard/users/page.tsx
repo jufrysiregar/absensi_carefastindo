@@ -441,7 +441,7 @@ export default function ManagementEmployeePage() {
   // Export excel function
   function exportExcel() {
     if (attRows.length === 0) {
-      toast.warning('Tidak ada data untuk diekspor')
+      toast.error('Tidak ada data untuk diekspor')
       return
     }
     const ws = XLSX.utils.json_to_sheet(attRows.map(r => {
@@ -465,7 +465,7 @@ export default function ManagementEmployeePage() {
   // Export PDF function
   function exportPDF() {
     if (attRows.length === 0) {
-      toast.warning('Tidak ada data untuk diekspor')
+      toast.error('Tidak ada data untuk diekspor')
       return
     }
 

@@ -231,11 +231,7 @@ export default function ReportsPage() {
   // Excel export
   const downloadExcel = (data: any[], filename: string) => {
     if (!data || data.length === 0) {
-      toast.custom((t) => (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm flex items-center shadow-sm">
-          📭 Tidak ada data untuk diekspor
-        </div>
-      ))
+      toast.error('Tidak ada data untuk diekspor')
       return
     }
     const ws = XLSX.utils.json_to_sheet(data)
@@ -248,11 +244,7 @@ export default function ReportsPage() {
   // PDF export using pdfmake
   const downloadPDF = (title: string, headers: string[], body: any[][], filename: string) => {
     if (!body || body.length === 0) {
-      toast.custom((t) => (
-        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 px-4 py-3 rounded-lg text-sm flex items-center shadow-sm">
-          📭 Tidak ada data untuk diekspor
-        </div>
-      ))
+      toast.error('Tidak ada data untuk diekspor')
       return
     }
 
