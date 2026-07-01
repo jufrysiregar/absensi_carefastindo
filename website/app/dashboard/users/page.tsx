@@ -235,7 +235,7 @@ export default function ManagementEmployeePage() {
     queryFn: async () => {
       let query = supabase
         .from('attendance')
-        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, users(name), user_shifts(shifts(id, name))', { count: 'exact' })
+        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, users!attendance_user_id_fkey(name, user_shifts(shifts(id, name)))', { count: 'exact' })
         .order('date', { ascending: false })
         .order('check_in_time', { ascending: false })
 
@@ -248,7 +248,7 @@ export default function ManagementEmployeePage() {
       let mapped = (data ?? []).map((r: any) => ({
         id: r.id,
         user_name: r.users?.name ?? '—',
-        shift_name: r.user_shifts?.shifts?.name ?? '—',
+        shift_name: r.users?.user_shifts?.[0]?.shifts?.name ?? '—',
         date: r.date,
         check_in: r.check_in_time,
         check_out: r.check_out_time,

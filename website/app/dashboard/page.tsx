@@ -76,14 +76,14 @@ export default function DashboardPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('attendance')
-        .select('id, status, check_in_time, date, users(name), user_shifts(shifts(name))')
+        .select('id, status, check_in_time, date, users!attendance_user_id_fkey(name, user_shifts(shifts(name)))')
         .order('created_at', { ascending: false })
         .limit(5)
 
       return (data ?? []).map((r: any) => ({
         id: r.id,
         user_name: r.users?.name ?? '—',
-        shift_name: r.user_shifts?.shifts?.name ?? '—',
+        shift_name: r.users?.user_shifts?.[0]?.shifts?.name ?? '—',
         date: r.date,
         check_in: r.check_in_time,
         status: r.status,
