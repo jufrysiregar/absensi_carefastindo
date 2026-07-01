@@ -825,7 +825,9 @@ export default function ManagementEmployeePage() {
               />
               <Select value={attFilterShift} onValueChange={v => { setAttFilterShift(v as string); setAttPage(1) }}>
                 <SelectTrigger className="w-full sm:w-[160px] bg-white h-9">
-                  <SelectValue placeholder="Semua Shift" />
+                  <SelectValue>
+                    {attFilterShift === 'all' ? 'Semua Shift' : attFilterShift}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Shift</SelectItem>
@@ -834,7 +836,9 @@ export default function ManagementEmployeePage() {
               </Select>
               <Select value={attFilterStatus} onValueChange={v => { setAttFilterStatus(v as string); setAttPage(1) }}>
                 <SelectTrigger className="w-full sm:w-[160px] bg-white h-9">
-                  <SelectValue placeholder="Semua Status" />
+                  <SelectValue>
+                    {attFilterStatus === 'all' ? 'Semua Status' : (attFilterStatus.charAt(0).toUpperCase() + attFilterStatus.slice(1))}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="all">Semua Status</SelectItem>
