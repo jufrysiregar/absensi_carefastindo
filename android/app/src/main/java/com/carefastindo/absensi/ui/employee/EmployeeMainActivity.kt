@@ -99,9 +99,10 @@ class EmployeeMainActivity : AppCompatActivity() {
         supportFragmentManager.beginTransaction()
             .replace(R.id.employeeFragmentContainer, fragment)
             .commit()
-    }
-
-    private fun observeViewModel() {
+        if (title.isNotEmpty()) {
+            binding.txtPageTitle.text = title
+        }
+    }    private fun observeViewModel() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
                 state.user?.let { user ->
