@@ -2,26 +2,26 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
-import { usePathname } from 'next/navigation'
-import { createClient } from '@/lib/supabase/client'
-import { useRouter } from 'next/navigation'
+import { usePathname, useRouter } from 'next/navigation'
 import { useState, useEffect } from 'react'
+import { LogOut } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 import { cn } from '@/lib/utils'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
-  { href: '/dashboard/users', label: 'Management Employee' },
   { href: '/dashboard/qr-code', label: 'QR Generator' },
-  { href: '/dashboard/announcements', label: 'Announcements' },
-  { href: '/dashboard/reports', label: 'Reports' },
+  { href: '/dashboard/users', label: 'Management Employee' },
   { href: '/dashboard/leave-requests', label: 'Leave Requests' },
+  { href: '/dashboard/reports', label: 'Reports' },
+  { href: '/dashboard/announcements', label: 'Announcements' },
 ]
 
 export default function Sidebar() {
   const pathname = usePathname()
   const router = useRouter()
   const [collapsed, setCollapsed] = useState(false)
-  const [userEmail, setUserEmail] = useState('superadmin@carefast.com')
+  const [userEmail, setUserEmail] = useState('')
 
   useEffect(() => {
     async function getUser() {
@@ -71,6 +71,9 @@ export default function Sidebar() {
         </div>
       </div>
 
+      {/* Garis pemisah bawah logo */}
+      <div className="mb-4 border-t border-slate-200" />
+
       {/* Collapse toggle (can be placed elsewhere or visible on mobile only. Hidden on desktop as per standard sidebar unless requested) */}
       <button
         onClick={() => setCollapsed(!collapsed)}
@@ -107,23 +110,17 @@ export default function Sidebar() {
         })}
       </nav>
 
-      {/* User Profile / Logout */}
-      <div className="p-4 border-t border-slate-200">
-        {!collapsed && (
-          <div className="mb-4">
-            <p className="text-sm font-medium text-slate-800 truncate">Super Admin</p>
-            <p className="text-xs text-slate-500 truncate">{userEmail}</p>
-          </div>
-        )}
+      {/* Bottom: Keluar */}
+      <div className="border-t border-slate-200 p-3">
         <button
           onClick={handleLogout}
-          title="Logout"
           className={cn(
-            'flex items-center justify-center w-full px-3 py-2 rounded text-[14px] font-medium text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-150',
-            collapsed && 'px-0'
+            'flex items-center gap-3 w-full px-3 py-2.5 rounded-lg text-[13px] font-semibold text-slate-600 hover:bg-red-50 hover:text-red-600 transition-all duration-150',
+            collapsed && 'justify-center px-0'
           )}
         >
-          {collapsed ? 'Log' : 'Logout'}
+          <LogOut className="w-4 h-4 shrink-0" />
+          {!collapsed && <span>Keluar</span>}
         </button>
       </div>
     </aside>

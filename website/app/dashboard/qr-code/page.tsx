@@ -171,11 +171,13 @@ export default function QRCodePage() {
   const { data: history = [], isLoading: historyLoading } = useQuery<QRHistory[]>({
     queryKey: ['qrHistory'],
     queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0]
       const { data } = await supabase
         .from('qr_code_logs')
         .select('id, generated_at, expires_at, qr_code, shifts(name)')
+        .gte('generated_at', today)
         .order('generated_at', { ascending: false })
-        .limit(10)
+        .limit(4)
 
       return (data ?? []).map((h: any) => ({
         id: h.id,
@@ -353,23 +355,25 @@ export default function QRCodePage() {
       </div>
 
       {/* History */}
-      <Card className="shadow-sm overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4 text-center">
-          <CardTitle className="text-base flex items-center justify-center gap-2">
-            Riwayat Generate QR Code (10 data terakhir)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="overflow-x-auto">
+      {/* History */}
+      <Card className="shadow-sm border border-slate-100 rounded-xl overflow-hidden bg-white">
+        <div className="px-6 pt-6">
+          <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0F172A' }}>
+            Riwayat Generate QR Code
+          </h3>
+          <div style={{ borderBottom: '2px solid #E2E8F0', marginTop: '12px', marginBottom: '16px' }} />
+        </div>
+        <CardContent className="px-6 pb-6 pt-0">
+          <div className="overflow-hidden border border-slate-100 rounded-lg">
             <Table className="border-collapse w-full">
-              <TableHeader className="bg-[#F8FAFC] border-b border-[#E2E8F0]">
+              <TableHeader style={{ background: '#F8FAFC' }}>
                 <TableRow className="hover:bg-transparent border-b border-[#E2E8F0]">
-                  <TableHead className="text-[#475569] font-semibold py-3 border-b border-[#E2E8F0] text-center">Jenis Shift</TableHead>
-                  <TableHead className="text-[#475569] font-semibold py-3 border-b border-[#E2E8F0] text-center">Tanggal Generate</TableHead>
-                  <TableHead className="text-[#475569] font-semibold py-3 border-b border-[#E2E8F0] text-center">Waktu Generate</TableHead>
-                  <TableHead className="text-[#475569] font-semibold py-3 border-b border-[#E2E8F0] text-center">Kadaluarsa</TableHead>
-                  <TableHead className="text-[#475569] font-semibold py-3 border-b border-[#E2E8F0] text-center">Status</TableHead>
-                  <TableHead className="text-[#475569] font-semibold py-3 border-b border-[#E2E8F0] text-center">Aksi</TableHead>
+                  <TableHead className="text-center font-semibold" style={{ color: '#475569', padding: '12px 16px' }}>Jenis Shift</TableHead>
+                  <TableHead className="text-center font-semibold" style={{ color: '#475569', padding: '12px 16px' }}>Tanggal</TableHead>
+                  <TableHead className="text-center font-semibold" style={{ color: '#475569', padding: '12px 16px' }}>Waktu</TableHead>
+                  <TableHead className="text-center font-semibold" style={{ color: '#475569', padding: '12px 16px' }}>Kadaluarsa</TableHead>
+                  <TableHead className="text-center font-semibold" style={{ color: '#475569', padding: '12px 16px' }}>Status</TableHead>
+                  <TableHead className="text-center font-semibold" style={{ color: '#475569', padding: '12px 16px' }}>Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -377,58 +381,72 @@ export default function QRCodePage() {
                   Array.from({ length: 3 }).map((_, i) => (
                     <TableRow key={i}>
                       {Array.from({ length: 6 }).map((_, j) => (
-                        <TableCell key={j}><Skeleton className="h-4 w-full max-w-[120px]" /></TableCell>
+                        <TableCell key={j} style={{ padding: '12px 16px' }}><Skeleton className="h-4 w-full max-w-[120px]" /></TableCell>
                       ))}
                     </TableRow>
                   ))
                 ) : history.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={6} className="text-center py-8 text-slate-400">
-                      Belum ada QR code yang di-generate
+                    <TableCell colSpan={6} className="text-center py-12" style={{ color: '#94A3B8' }}>
+                      <div className="flex flex-col items-center justify-center space-y-2">
+                        <QrIcon className="w-8 h-8 text-slate-300 animate-pulse" />
+                        <span className="text-sm font-medium">Belum ada QR yang digenerate hari ini</span>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ) : (
                   history.map(qr => {
                     const isExpired = parseUTC(qr.expires_at) < new Date()
-                    console.log('QR:', qr)
-                    console.log('expires_at:', qr.expires_at)
-                    console.log('isExpired:', isExpired)
                     const isRowActive = !isExpired
                     return (
                       <TableRow key={qr.id} className="bg-white border-b border-[#E2E8F0] hover:bg-slate-50/50">
-                        <TableCell className="font-semibold text-slate-700 py-3 border-b border-[#E2E8F0] text-center">{qr.shift_name}</TableCell>
-                        <TableCell className="text-slate-500 py-3 border-b border-[#E2E8F0] text-center">
+                        <TableCell className="font-semibold text-slate-700 text-center" style={{ padding: '12px 16px' }}>{qr.shift_name}</TableCell>
+                        <TableCell className="text-center" style={{ color: '#334155', padding: '12px 16px' }}>
                           {formatDate(qr.generated_at)}
                         </TableCell>
-                        <TableCell className="text-slate-500 py-3 border-b border-[#E2E8F0] text-center">
+                        <TableCell className="text-center" style={{ color: '#334155', padding: '12px 16px' }}>
                           {formatTime(qr.generated_at)}
                         </TableCell>
-                        <TableCell className="text-slate-500 py-3 border-b border-[#E2E8F0] text-center">
+                        <TableCell className="text-center" style={{ color: '#334155', padding: '12px 16px' }}>
                           {formatTime(qr.expires_at)}
                         </TableCell>
-                        <TableCell className="py-3 border-b border-[#E2E8F0] text-center">
+                        <TableCell className="text-center" style={{ padding: '12px 16px' }}>
                           <div className="flex justify-center">
-                            <Badge 
-                              className={isRowActive 
-                                ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-50" 
-                                : "bg-red-50 text-red-700 border-red-200 hover:bg-red-50"
-                              } 
-                              variant="outline"
+                            <span 
+                              style={{ 
+                                background: isRowActive ? '#DCFCE7' : '#FEE2E2',
+                                color: isRowActive ? '#166534' : '#991B1B', 
+                                padding: '4px 12px', 
+                                borderRadius: '9999px', 
+                                fontSize: '12px', 
+                                fontWeight: 600,
+                                whiteSpace: 'nowrap'
+                              }}
                             >
                               {isRowActive ? 'Active' : 'Expired'}
-                            </Badge>
+                            </span>
                           </div>
                         </TableCell>
-                        <TableCell className="py-3 border-b border-[#E2E8F0] text-center">
-                          <div className="flex justify-center gap-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
+                        <TableCell className="text-center" style={{ padding: '12px 16px' }}>
+                          <div className="flex justify-center">
+                            <button
                               onClick={() => handleConfirmDelete(qr.id)}
-                              className="text-red-600 hover:text-red-700 hover:bg-red-50 h-8"
+                              style={{
+                                background: '#FEF2F2',
+                                color: '#DC2626',
+                                padding: '6px 12px',
+                                borderRadius: '6px',
+                                fontSize: '12px',
+                                fontWeight: '600',
+                                border: 'none',
+                                cursor: 'pointer',
+                                transition: 'background 0.2s',
+                              }}
+                              onMouseEnter={e => e.currentTarget.style.background = '#FEE2E2'}
+                              onMouseLeave={e => e.currentTarget.style.background = '#FEF2F2'}
                             >
-                              <Trash2 className="w-3.5 h-3.5 mr-1" /> Hapus
-                            </Button>
+                              <Trash2 className="w-3.5 h-3.5 inline mr-1" /> Hapus
+                            </button>
                           </div>
                         </TableCell>
                       </TableRow>

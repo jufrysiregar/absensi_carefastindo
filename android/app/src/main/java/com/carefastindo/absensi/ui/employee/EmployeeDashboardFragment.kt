@@ -22,6 +22,8 @@ import com.carefastindo.absensi.data.model.CompanyConfig
 import com.carefastindo.absensi.data.model.EmergencyAssignment
 import com.carefastindo.absensi.data.model.Notification
 import com.carefastindo.absensi.data.model.OffSchedule
+import com.carefastindo.absensi.data.model.OvertimeAssignment
+import com.carefastindo.absensi.ui.admin.AssignLemburActivity
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.utils.ShiftHelper
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -66,6 +68,7 @@ class EmployeeDashboardFragment : Fragment() {
     private var hasEmergencyAssignmentToday = false
     private var companyConfig: CompanyConfig? = null
     private var activeAdminNotification: Notification? = null
+    private var activeOvertimeAssignment: OvertimeAssignment? = null
 
     // Temp variables for face verification
     private var pendingAttendanceType: String = ""
@@ -153,6 +156,23 @@ class EmployeeDashboardFragment : Fragment() {
         btnEndBreakEarly?.setOnClickListener {
             endBreakEarly()
         }
+
+        val btnAssignLemburAdmin = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnAssignLemburAdmin)
+        btnAssignLemburAdmin?.setOnClickListener {
+            startActivity(Intent(requireContext(), AssignLemburActivity::class.java))
+        }
+
+        val btnOvertime = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOvertime)
+        btnOvertime?.setOnClickListener {
+            val overtime = activeOvertimeAssignment
+            if (overtime != null) {
+                if (overtime.status == "pending") {
+                    startPresensiFlow("overtime_in")
+                } else if (overtime.status == "active") {
+                    startPresensiFlow("overtime_out")
+                }
+            }
+        }
     }
 
     private fun refreshDashboardData(onComplete: (() -> Unit)? = null) {
@@ -220,6 +240,20 @@ class EmployeeDashboardFragment : Fragment() {
                         }.decodeList<Notification>()
                 }
                 activeAdminNotification = notifList.firstOrNull()
+
+                // 6. Fetch overtime assignment for today
+                val overtimeList = withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("overtime_assignments")
+                        .select {
+                            filter {
+                                eq("user_id", userId)
+                                eq("assignment_date", todayStr)
+                            }
+                        }.decodeList<OvertimeAssignment>()
+                }
+                // get the first active or pending overtime, else completed
+                activeOvertimeAssignment = overtimeList.firstOrNull { it.status == "active" || it.status == "pending" }
+                    ?: overtimeList.firstOrNull { it.status == "completed" }
 
                 updateUI()
             } catch (e: Exception) {
@@ -339,6 +373,36 @@ class EmployeeDashboardFragment : Fragment() {
             txtAdminNotificationContent.text = notif.message
         } else {
             adminNotificationCard.visibility = View.GONE
+        }
+
+        // 5. Overtime Logic
+        val btnAssignLemburAdmin = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnAssignLemburAdmin)
+        val cardOvertimeInfo = view.findViewById<androidx.cardview.widget.CardView>(R.id.cardOvertimeInfo)
+        val txtOvertimeInfoContent = view.findViewById<android.widget.TextView>(R.id.txtOvertimeInfoContent)
+        val btnOvertime = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOvertime)
+
+        if (user?.role.equals("leader", ignoreCase = true)) {
+            btnAssignLemburAdmin?.visibility = View.VISIBLE
+        } else {
+            btnAssignLemburAdmin?.visibility = View.GONE
+        }
+
+        val overtime = activeOvertimeAssignment
+        if (overtime != null && (overtime.status == "pending" || overtime.status == "active")) {
+            cardOvertimeInfo?.visibility = View.VISIBLE
+            txtOvertimeInfoContent?.text = "⚡ Anda ditugaskan lembur hari ini.\nKeterangan: ${overtime.keterangan ?: "-"}"
+            
+            btnOvertime?.visibility = View.VISIBLE
+            if (overtime.status == "pending") {
+                btnOvertime?.text = "MULAI LEMBUR"
+                btnOvertime?.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#F59E0B"))
+            } else {
+                btnOvertime?.text = "AKHIRI LEMBUR"
+                btnOvertime?.backgroundTintList = android.content.res.ColorStateList.valueOf(android.graphics.Color.parseColor("#EF4444"))
+            }
+        } else {
+            cardOvertimeInfo?.visibility = View.GONE
+            btnOvertime?.visibility = View.GONE
         }
     }
 
@@ -568,6 +632,30 @@ class EmployeeDashboardFragment : Fragment() {
                             }
                         }
                         Toast.makeText(requireContext(), "Absen Pulang Berhasil. Selamat Beristirahat!", Toast.LENGTH_LONG).show()
+                    }
+                    "overtime_in" -> {
+                        val overtimeId = activeOvertimeAssignment?.id ?: return@launch
+                        withContext(Dispatchers.IO) {
+                            SupabaseClient.db.from("overtime_assignments").update({
+                                set("status", "active")
+                                set("actual_start_time", nowStr)
+                            }) {
+                                filter { eq("id", overtimeId) }
+                            }
+                        }
+                        Toast.makeText(requireContext(), "Mulai Lembur Berhasil!", Toast.LENGTH_LONG).show()
+                    }
+                    "overtime_out" -> {
+                        val overtimeId = activeOvertimeAssignment?.id ?: return@launch
+                        withContext(Dispatchers.IO) {
+                            SupabaseClient.db.from("overtime_assignments").update({
+                                set("status", "completed")
+                                set("actual_end_time", nowStr)
+                            }) {
+                                filter { eq("id", overtimeId) }
+                            }
+                        }
+                        Toast.makeText(requireContext(), "Lembur Selesai. Terima kasih!", Toast.LENGTH_LONG).show()
                     }
                 }
 

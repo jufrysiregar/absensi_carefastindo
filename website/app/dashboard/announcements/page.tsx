@@ -174,13 +174,13 @@ export default function AnnouncementsPage() {
       </div>
 
       {/* Form */}
-      <Card className={`shadow-sm transition-colors ${editId ? 'border-amber-200 bg-amber-50/30' : 'border-blue-100 bg-blue-50/30'}`}>
-        <CardHeader className="pb-3">
+      <Card className={`shadow-sm overflow-hidden flex flex-col bg-white transition-colors ${editId ? 'border-amber-200' : 'border-slate-100'}`}>
+        <CardHeader className={`${editId ? 'bg-amber-50/50 border-b border-amber-100' : 'bg-slate-50/50 border-b border-slate-100'} pb-4`}>
           <CardTitle className="text-base flex items-center gap-2">
             {editId ? <><Edit2 className="w-4 h-4 text-amber-500" /> Edit Pengumuman</> : <><Send className="w-4 h-4 text-blue-500" /> Buat Pengumuman Baru</>}
           </CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="pt-6">
           <form onSubmit={handleSend} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="title">Judul Pengumuman</Label>
@@ -252,12 +252,12 @@ export default function AnnouncementsPage() {
           <div className="overflow-x-auto">
             <Table>
               <TableHeader className="bg-slate-50/50">
-                <TableRow className="hover:bg-transparent">
-                  <TableHead className="w-[40%]">Informasi</TableHead>
-                  <TableHead>Target</TableHead>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Keterbacaan</TableHead>
-                  <TableHead className="text-right">Aksi</TableHead>
+                <TableRow className="hover:bg-transparent border-b border-slate-100">
+                  <TableHead className="w-[40%] pl-4">Informasi</TableHead>
+                  <TableHead className="text-center">Target</TableHead>
+                  <TableHead className="text-center">Tanggal</TableHead>
+                  <TableHead className="text-center">Keterbacaan</TableHead>
+                  <TableHead className="text-center pr-4">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -278,26 +278,26 @@ export default function AnnouncementsPage() {
                 ) : (
                   list.map(a => (
                     <TableRow key={a.id} className={editId === a.id ? 'bg-amber-50/20' : ''}>
-                      <TableCell>
+                      <TableCell className="pl-4">
                         <div className="font-semibold text-slate-700">{a.title}</div>
                         <div className="text-sm text-slate-500 truncate max-w-[300px] mt-0.5">{a.content}</div>
                       </TableCell>
-                      <TableCell>
-                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+                      <TableCell className="text-center">
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 inline-flex">
                           <Users className="w-3 h-3 mr-1" />{a.target_role}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-500 text-sm whitespace-nowrap">
+                      <TableCell className="text-slate-500 text-sm whitespace-nowrap text-center">
                         {new Date(a.created_at).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' })}
                       </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-3">
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-3">
                           <Progress value={a.total_target > 0 ? (a.read_count / a.total_target) * 100 : 0} className="w-[80px] h-2 bg-slate-100" />
                           <span className="text-xs text-slate-500 font-medium whitespace-nowrap">{a.read_count} / {a.total_target}</span>
                         </div>
                       </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex items-center justify-end gap-2">
+                      <TableCell className="text-center pr-4">
+                        <div className="flex items-center justify-center gap-2">
                           <Button variant="ghost" size="icon" onClick={() => startEdit(a)} className="h-8 w-8 text-amber-500 hover:text-amber-600 hover:bg-amber-50">
                             <Edit2 className="w-4 h-4" />
                           </Button>

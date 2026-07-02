@@ -39,13 +39,16 @@ interface ShiftHistory {
   old_shift: string
   new_shift: string
   effective_date: string
-  created_at: string 
+  created_at: string
+  is_double?: boolean
 }
 
 interface AttendanceRow {
   id: string
+  user_id: string
   user_name: string
   shift_name: string
+  shift_type: string | null
   date: string
   check_in: string | null
   check_out: string | null
@@ -55,6 +58,25 @@ interface AttendanceRow {
   selfie_url: string | null
   location: string | null
   notes: string | null
+  overtime_check_in: string | null
+  overtime_check_out: string | null
+}
+
+interface OvertimeRow {
+  id: string
+  user_id: string
+  user_name: string
+  shift_id: string
+  shift_name: string
+  assignment_date: string
+  assigned_by_name: string
+  assigned_from: string
+  status: string
+  keterangan: string | null
+  overtime_in: string | null
+  overtime_out: string | null
+  duration: number | null
+  created_at: string
 }
 
 const PAGE_SIZE = 10
@@ -120,19 +142,35 @@ export default function ManagementEmployeePage() {
   const [isDeleting, setIsDeleting] = useState(false)
 
   // Update Shift Form state
+  // Update Shift / Overtime Form state
   const [shiftForm, setShiftForm] = useState({
     userId: '',
     shiftId: '',
-    effectiveDate: new Date().toISOString().split('T')[0]
+    effectiveDate: new Date().toISOString().split('T')[0],
+    shiftType: 'single',
+    keterangan: ''
   })
 
   // Attendance table filters & pagination
+  const todayStr = new Date().toISOString().split('T')[0]
   const [attPage, setAttPage] = useState(1)
   const [attSearch, setAttSearch] = useState('')
-  const [attFilterDate, setAttFilterDate] = useState('')
+  const [attFilterDate, setAttFilterDate] = useState(todayStr)
   const [attFilterShift, setAttFilterShift] = useState('all')
   const [attFilterStatus, setAttFilterStatus] = useState('all')
   const [selectedAtt, setSelectedAtt] = useState<AttendanceRow | null>(null)
+  const [editingAtt, setEditingAtt] = useState<AttendanceRow | null>(null)
+  const [editAttForm, setEditAttForm] = useState({
+    check_in: '',
+    check_out: '',
+    break_start: '',
+    break_end: '',
+    status: 'hadir',
+    notes: '',
+    overtime_in: '',
+    overtime_out: '',
+  })
+  const [savingAtt, setSavingAtt] = useState(false)
 
   const debouncedAttSearch = useDebounce(attSearch, 500)
 
@@ -150,6 +188,9 @@ export default function ManagementEmployeePage() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'attendance' }, () => {
         queryClient.invalidateQueries({ queryKey: ['attendance'] })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'overtime_assignments' }, () => {
+        queryClient.invalidateQueries({ queryKey: ['overtime'] })
       })
       .subscribe()
 
@@ -193,13 +234,15 @@ export default function ManagementEmployeePage() {
     }
   })
 
-  // Fetch history query (limited to 3)
+  // Fetch history query (limited to 3, only today)
   const { data: history = [], isLoading: historyLoading } = useQuery<ShiftHistory[]>({
     queryKey: ['shiftHistory'],
     queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0]
       const { data, error } = await supabase
         .from('user_shifts')
         .select('id, effective_date, created_at, user_id, users(name), shifts(name)')
+        .eq('effective_date', today)
         .order('created_at', { ascending: false })
         .limit(3)
 
@@ -215,6 +258,14 @@ export default function ManagementEmployeePage() {
           .limit(1)
           .maybeSingle()
 
+        const { data: ot } = await supabase
+          .from('overtime_assignments')
+          .select('id')
+          .eq('user_id', h.user_id)
+          .eq('assignment_date', h.effective_date)
+          .limit(1)
+          .maybeSingle()
+
         return {
           id: h.id,
           user_name: h.users?.name ?? '—',
@@ -222,6 +273,7 @@ export default function ManagementEmployeePage() {
           new_shift: h.shifts?.name ?? 'Tanpa Shift',
           effective_date: h.effective_date,
           created_at: h.created_at,
+          is_double: !!ot,
         }
       }))
 
@@ -235,7 +287,7 @@ export default function ManagementEmployeePage() {
     queryFn: async () => {
       let query = supabase
         .from('attendance')
-        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, users!attendance_user_id_fkey(name, user_shifts(shifts(id, name)))', { count: 'exact' })
+        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, user_id, users!attendance_user_id_fkey(name, user_shifts(shift_type, shifts(id, name)))', { count: 'exact' })
         .order('date', { ascending: false })
         .order('check_in_time', { ascending: false })
 
@@ -245,20 +297,67 @@ export default function ManagementEmployeePage() {
       const from = (attPage - 1) * PAGE_SIZE
       const { data, count } = await query.range(from, from + PAGE_SIZE - 1)
 
-      let mapped = (data ?? []).map((r: any) => ({
-        id: r.id,
-        user_name: r.users?.name ?? '—',
-        shift_name: r.users?.user_shifts?.[0]?.shifts?.name ?? '—',
-        date: r.date,
-        check_in: r.check_in_time,
-        check_out: r.check_out_time,
-        break_start: r.break_start,
-        break_end: r.break_end,
-        status: r.status,
-        selfie_url: r.selfie_url,
-        location: r.location_lat && r.location_lng ? `${r.location_lat}, ${r.location_lng}` : '—',
-        notes: r.note,
-      }))
+      // Fetch overtime data for all rows in batch
+      const rowsData = data ?? []
+      const userDatePairs = rowsData.map((r: any) => ({ user_id: r.user_id, date: r.date }))
+
+      let overtimeMap: Record<string, { check_in: string | null; check_out: string | null }> = {}
+      if (userDatePairs.length > 0) {
+        const uniqueDates = [...new Set(userDatePairs.map((p: any) => p.date))]
+        const uniqueUsers = [...new Set(userDatePairs.map((p: any) => p.user_id))]
+        const { data: otData } = await supabase
+          .from('overtime_assignments')
+          .select('user_id, assignment_date, overtime_check_in, overtime_check_out')
+          .in('user_id', uniqueUsers)
+          .in('assignment_date', uniqueDates)
+        ;(otData ?? []).forEach((ot: any) => {
+          overtimeMap[`${ot.user_id}_${ot.assignment_date}`] = {
+            check_in: ot.overtime_check_in,
+            check_out: ot.overtime_check_out,
+          }
+        })
+      }
+
+      // Fetch user_shifts filtered by the exact attendance dates (to get correct shift_type per day)
+      let userShiftMap: Record<string, { shift_name: string; shift_type: string | null }> = {}
+      if (userDatePairs.length > 0) {
+        const uniqDates2 = [...new Set(userDatePairs.map((p: any) => p.date))]
+        const uniqUsers2 = [...new Set(userDatePairs.map((p: any) => p.user_id))]
+        const { data: usData } = await supabase
+          .from('user_shifts')
+          .select('user_id, effective_date, shift_type, shifts(name)')
+          .in('user_id', uniqUsers2)
+          .in('effective_date', uniqDates2)
+        ;(usData ?? []).forEach((us: any) => {
+          userShiftMap[`${us.user_id}_${us.effective_date}`] = {
+            shift_name: (us.shifts as any)?.name ?? '—',
+            shift_type: us.shift_type ?? null,
+          }
+        })
+      }
+
+      let mapped = rowsData.map((r: any) => {
+        const shiftKey = `${r.user_id}_${r.date}`
+        const matchedShift = userShiftMap[shiftKey]
+        return {
+          id: r.id,
+          user_id: r.user_id,
+          user_name: r.users?.name ?? '—',
+          shift_name: matchedShift?.shift_name ?? r.users?.user_shifts?.[0]?.shifts?.name ?? '—',
+          shift_type: matchedShift?.shift_type ?? r.users?.user_shifts?.[0]?.shift_type ?? null,
+          date: r.date,
+          check_in: r.check_in_time,
+          check_out: r.check_out_time,
+          break_start: r.break_start,
+          break_end: r.break_end,
+          status: r.status,
+          selfie_url: r.selfie_url,
+          location: r.location_lat && r.location_lng ? `${r.location_lat}, ${r.location_lng}` : '—',
+          notes: r.note,
+          overtime_check_in: overtimeMap[`${r.user_id}_${r.date}`]?.check_in ?? null,
+          overtime_check_out: overtimeMap[`${r.user_id}_${r.date}`]?.check_out ?? null,
+        }
+      })
 
       if (debouncedAttSearch) {
         mapped = mapped.filter(r => r.user_name.toLowerCase().includes(debouncedAttSearch.toLowerCase()))
@@ -409,7 +508,7 @@ export default function ManagementEmployeePage() {
     },
     onSuccess: () => {
       toast.success('Shift karyawan berhasil diperbarui!')
-      setShiftForm({ userId: '', shiftId: '', effectiveDate: new Date().toISOString().split('T')[0] })
+      setShiftForm({ userId: '', shiftId: '', effectiveDate: new Date().toISOString().split('T')[0], shiftType: 'single', keterangan: '' })
       queryClient.invalidateQueries({ queryKey: ['users'] })
       queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
     },
@@ -425,18 +524,109 @@ export default function ManagementEmployeePage() {
       return
     }
 
-    // Check if target shift is the same as the current shift
-    const selectedUser = users.find(u => u.id === shiftForm.userId)
-    const currentShiftId = selectedUser?.shift_id || ''
-    const targetShiftId = shiftForm.shiftId === 'none' ? '' : shiftForm.shiftId
+    if (shiftForm.shiftType === 'single') {
+      const selectedUser = users.find(u => u.id === shiftForm.userId)
+      const currentShiftId = selectedUser?.shift_id || ''
+      const targetShiftId = shiftForm.shiftId === 'none' ? '' : shiftForm.shiftId
 
-    if (currentShiftId === targetShiftId) {
-      toast.error('Gagal memperbarui shift: Karyawan sudah berada di shift tersebut! Perubahan shift tidak valid.')
-      return
+      if (currentShiftId === targetShiftId) {
+        toast.error('Gagal memperbarui shift: Karyawan sudah berada di shift tersebut! Perubahan shift tidak valid.')
+        return
+      }
+
+      updateShiftMutation.mutate({ userId: shiftForm.userId, shiftId: shiftForm.shiftId, effectiveDate: shiftForm.effectiveDate })
+    } else {
+      if (!shiftForm.keterangan) {
+        toast.error('Keterangan wajib diisi untuk penugasan lembur!')
+        return
+      }
+      assignOvertimeMutation.mutate({ 
+        userId: shiftForm.userId, 
+        shiftId: shiftForm.shiftId, 
+        date: shiftForm.effectiveDate, 
+        keterangan: shiftForm.keterangan 
+      })
     }
-
-    updateShiftMutation.mutate(shiftForm)
   }
+
+  // Fetch overtime assignments
+  const { data: overtimeList = [], isLoading: overtimeLoading } = useQuery<OvertimeRow[]>({
+    queryKey: ['overtime'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('overtime_assignments')
+        .select('id, user_id, shift_id, assignment_date, assigned_by, assigned_from, status, keterangan, overtime_in, overtime_out, duration, created_at, users!overtime_assignments_user_id_fkey(name), shifts(name), assigned_by_user:users!overtime_assignments_assigned_by_fkey(name)')
+        .order('created_at', { ascending: false })
+        .limit(20)
+
+      if (error) throw error
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        user_id: r.user_id,
+        user_name: r.users?.name ?? '—',
+        shift_id: r.shift_id,
+        shift_name: r.shifts?.name ?? '—',
+        assignment_date: r.assignment_date,
+        assigned_by_name: r.assigned_by_user?.name ?? '—',
+        assigned_from: r.assigned_from,
+        status: r.status,
+        keterangan: r.keterangan,
+        overtime_in: r.overtime_in,
+        overtime_out: r.overtime_out,
+        duration: r.duration,
+        created_at: r.created_at,
+      }))
+    }
+  })
+
+  // Assign overtime mutation
+  const assignOvertimeMutation = useMutation({
+    mutationFn: async (payload: { userId: string; shiftId: string; date: string; keterangan: string }) => {
+      // Get current logged-in user id
+      const { data: { user } } = await supabase.auth.getUser()
+      const { error } = await supabase
+        .from('overtime_assignments')
+        .insert({
+          user_id: payload.userId,
+          shift_id: payload.shiftId,
+          assignment_date: payload.date,
+          assigned_by: user?.id,
+          assigned_from: 'website',
+          shift_type: 'double',
+          status: 'pending',
+          keterangan: payload.keterangan || null,
+        })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('Lembur berhasil di-assign!')
+      setShiftForm({ userId: '', shiftId: '', effectiveDate: new Date().toISOString().split('T')[0], shiftType: 'single', keterangan: '' })
+      queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
+    },
+    onError: (error: any) => {
+      toast.error('Gagal assign lembur: ' + error.message)
+    }
+  })
+
+  // Delete overtime mutation
+  const deleteOvertimeMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from('overtime_assignments')
+        .delete()
+        .eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('Tugas lembur berhasil dihapus!')
+      queryClient.invalidateQueries({ queryKey: ['overtime'] })
+    },
+    onError: (error: any) => {
+      toast.error('Gagal menghapus lembur: ' + error.message)
+    }
+  })
+
+
 
   // Export excel function
   function exportExcel() {
@@ -445,14 +635,12 @@ export default function ManagementEmployeePage() {
       return
     }
     const ws = XLSX.utils.json_to_sheet(attRows.map(r => {
-      const dur = calculateBreakDuration(r.break_start, r.break_end)
+      const breakText = r.break_start ? (r.break_end ? `${formatTime(r.break_start)} - ${formatTime(r.break_end)}` : `${formatTime(r.break_start)} - --:--`) : '-'
       return {
         Nama: r.user_name, Shift: r.shift_name, Tanggal: r.date,
-        'Check-in': r.check_in ? formatTime(r.check_in) : '-',
-        'Istirahat Mulai': r.break_start ? formatTime(r.break_start) : '-',
-        'Istirahat Selesai': r.break_end ? formatTime(r.break_end) : '-',
-        'Durasi Istirahat': dur.text,
-        'Check-out': r.check_out ? formatTime(r.check_out) : '-',
+        'Jam Masuk': r.check_in ? formatTime(r.check_in) : '-',
+        'Istirahat': breakText,
+        'Jam Pulang': r.check_out ? formatTime(r.check_out) : '-',
         Status: r.status,
       }
     }))
@@ -477,17 +665,15 @@ export default function ManagementEmployeePage() {
           style: 'tableExample',
           table: {
             headerRows: 1,
-            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
             body: [
               [
                 { text: 'Nama', style: 'tableHeader' },
                 { text: 'Shift', style: 'tableHeader' },
                 { text: 'Tanggal', style: 'tableHeader' },
-                { text: 'Check-in', style: 'tableHeader' },
-                { text: 'Istirahat Mulai', style: 'tableHeader' },
-                { text: 'Istirahat Selesai', style: 'tableHeader' },
-                { text: 'Durasi', style: 'tableHeader' },
-                { text: 'Check-out', style: 'tableHeader' },
+                { text: 'Jam Masuk', style: 'tableHeader' },
+                { text: 'Istirahat', style: 'tableHeader' },
+                { text: 'Jam Pulang', style: 'tableHeader' },
                 { text: 'Status', style: 'tableHeader' }
               ],
               ...attRows.map(r => [
@@ -495,9 +681,7 @@ export default function ManagementEmployeePage() {
                 r.shift_name,
                 r.date,
                 r.check_in ? formatTime(r.check_in) : '-',
-                r.break_start ? formatTime(r.break_start) : '-',
-                r.break_end ? formatTime(r.break_end) : '-',
-                calculateBreakDuration(r.break_start, r.break_end).text,
+                r.break_start ? (r.break_end ? `${formatTime(r.break_start)} - ${formatTime(r.break_end)}` : `${formatTime(r.break_start)} - --:--`) : '-',
                 r.check_out ? formatTime(r.check_out) : '-',
                 r.status
               ])
@@ -677,79 +861,219 @@ export default function ManagementEmployeePage() {
         </CardContent>
       </Card>
 
-      {/* 2. UBAH SHIFT KARYAWAN (KEMBALIKAN FUNGSIONALITAS) */}
-      <Card className="shadow-sm border-blue-100 bg-blue-50/20">
-        <CardHeader className="pb-3 border-b border-blue-100/50">
-          <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-            🔄 Ubah Shift Karyawan
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-4">
-          <form onSubmit={handleUpdateShift} className="flex flex-col md:flex-row gap-4 items-end">
-            <div className="flex flex-col w-full md:w-64">
-              <label htmlFor="shiftUserId" className="text-sm font-medium text-slate-600 mb-1.5">Karyawan</label>
+      {/* 2. UBAH SHIFT / KERJA LEMBUR */}
+      <div style={{
+        background: '#FFFFFF',
+        border: '1px solid #E2E8F0',
+        borderRadius: '12px',
+        padding: '24px',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
+      }}>
+        <h3 style={{
+          fontSize: '18px',
+          fontWeight: 'bold',
+          color: '#0F172A',
+          marginBottom: '20px',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
+        }}>
+          🔄 Ubah Shift / Kerja Lembur
+        </h3>
+
+        <form onSubmit={handleUpdateShift}>
+          {/* BARIS 1 & 2: 4 input dalam grid 2 kolom */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+            {/* Karyawan */}
+            <div>
+              <label htmlFor="shiftUserId" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
+                Karyawan <span style={{ color: '#EF4444' }}>*</span>
+              </label>
               <select
                 id="shiftUserId"
                 value={shiftForm.userId}
                 onChange={e => setShiftForm(f => ({ ...f, userId: e.target.value }))}
-                className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  color: '#0F172A',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  transition: 'border 0.2s, box-shadow 0.2s',
+                }}
+                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
               >
                 <option value="" disabled>Pilih Karyawan</option>
                 {users
                   .filter(u => u.role.toLowerCase() !== 'superadmin')
                   .map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.nip})</option>
+                    <option key={u.id} value={u.id}>{u.name} ({u.nip !== '—' ? u.nip : u.role})</option>
                   ))
                 }
               </select>
             </div>
-            
-            <div className="flex flex-col w-full md:w-56">
-              <label htmlFor="shiftNewId" className="text-sm font-medium text-slate-600 mb-1.5">Shift Baru</label>
+
+            {/* Tanggal Efektif */}
+            <div>
+              <label htmlFor="shiftDate" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
+                Tanggal Efektif <span style={{ color: '#EF4444' }}>*</span>
+              </label>
+              <input
+                id="shiftDate"
+                type="date"
+                value={shiftForm.effectiveDate}
+                onChange={e => setShiftForm(f => ({ ...f, effectiveDate: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  color: '#0F172A',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  transition: 'border 0.2s, box-shadow 0.2s',
+                  boxSizing: 'border-box',
+                }}
+                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
+              />
+            </div>
+
+            {/* Shift Baru */}
+            <div>
+              <label htmlFor="shiftNewId" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
+                Shift Baru <span style={{ color: '#EF4444' }}>*</span>
+              </label>
               <select
                 id="shiftNewId"
                 value={shiftForm.shiftId}
                 onChange={e => setShiftForm(f => ({ ...f, shiftId: e.target.value }))}
-                className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  color: '#0F172A',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  transition: 'border 0.2s, box-shadow 0.2s',
+                }}
+                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
               >
                 <option value="" disabled>Pilih Shift Baru</option>
                 {shifts.map(s => (
                   <option key={s.id} value={s.id}>{s.name}</option>
                 ))}
-                <option value="none">Tanpa Shift</option>
+                {shiftForm.shiftType === 'single' && <option value="none">Tanpa Shift</option>}
               </select>
             </div>
-            
-            <div className="flex flex-col w-full md:w-48">
-              <label htmlFor="shiftDate" className="text-sm font-medium text-slate-600 mb-1.5">Tanggal Efektif</label>
-              <Input
-                id="shiftDate"
-                type="date"
-                value={shiftForm.effectiveDate}
-                onChange={e => setShiftForm(f => ({ ...f, effectiveDate: e.target.value }))}
-                className="h-10 border-slate-200 bg-white"
+
+            {/* Keterangan */}
+            <div>
+              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
+                Keterangan
+              </label>
+              <input
+                type="text"
+                placeholder="Alasan lembur / perubahan shift..."
+                value={shiftForm.keterangan}
+                onChange={e => setShiftForm(f => ({ ...f, keterangan: e.target.value }))}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  border: '1px solid #E2E8F0',
+                  borderRadius: '8px',
+                  fontSize: '14px',
+                  color: '#0F172A',
+                  background: '#FFFFFF',
+                  outline: 'none',
+                  transition: 'border 0.2s, box-shadow 0.2s',
+                  boxSizing: 'border-box',
+                }}
+                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
               />
             </div>
-            
-            <Button 
-              type="submit" 
-              disabled={updateShiftMutation.isPending} 
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium h-10 px-6 w-full md:w-auto shrink-0"
+          </div>
+
+          {/* Tipe Perubahan */}
+          <div style={{ marginTop: '16px' }}>
+            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
+              Tipe Perubahan <span style={{ color: '#EF4444' }}>*</span>
+            </label>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="shiftType"
+                  value="single"
+                  checked={shiftForm.shiftType === 'single'}
+                  onChange={e => setShiftForm(f => ({ ...f, shiftType: e.target.value }))}
+                  style={{ width: '16px', height: '16px', accentColor: '#3B82F6' }}
+                />
+                <span style={{ fontSize: '14px', color: '#334155' }}>Ganti Shift (Single Shift)</span>
+              </label>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+                <input
+                  type="radio"
+                  name="shiftType"
+                  value="double"
+                  checked={shiftForm.shiftType === 'double'}
+                  onChange={e => setShiftForm(f => ({ ...f, shiftType: e.target.value }))}
+                  style={{ width: '16px', height: '16px', accentColor: '#3B82F6' }}
+                />
+                <span style={{ fontSize: '14px', color: '#334155' }}>Tambah Shift Lembur (Double Shift)</span>
+              </label>
+            </div>
+          </div>
+
+          {/* Tombol Update Shift */}
+          <div style={{ marginTop: '20px' }}>
+            <button
+              type="submit"
+              disabled={updateShiftMutation.isPending || assignOvertimeMutation.isPending}
+              style={{
+                width: '100%',
+                padding: '10px',
+                background: updateShiftMutation.isPending || assignOvertimeMutation.isPending ? '#93C5FD' : '#3B82F6',
+                color: '#FFFFFF',
+                fontSize: '14px',
+                fontWeight: '600',
+                borderRadius: '8px',
+                border: 'none',
+                cursor: updateShiftMutation.isPending || assignOvertimeMutation.isPending ? 'not-allowed' : 'pointer',
+                transition: 'background 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+              }}
+              onMouseEnter={e => {
+                if (!updateShiftMutation.isPending && !assignOvertimeMutation.isPending)
+                  (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'
+              }}
+              onMouseLeave={e => {
+                if (!updateShiftMutation.isPending && !assignOvertimeMutation.isPending)
+                  (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'
+              }}
             >
-              {updateShiftMutation.isPending ? (
-                <>
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Mengubah...
-                </>
+              {updateShiftMutation.isPending || assignOvertimeMutation.isPending ? (
+                <><Loader2 className="w-4 h-4 animate-spin" />Memproses...</>
               ) : (
                 'Update Shift'
               )}
-            </Button>
-          </form>
-        </CardContent>
-      </Card>
+            </button>
+          </div>
+        </form>
+      </div>
 
-      {/* 3. RIWAYAT PERUBAHAN (3 DATA TERAKHIR - DI PALING BAWAH RIWAYAT SHIFT) */}
       <Card className="shadow-sm">
         <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
           <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
@@ -763,7 +1087,8 @@ export default function ManagementEmployeePage() {
                 <TableHead className="text-slate-600 font-semibold py-3 pl-4">Karyawan</TableHead>
                 <TableHead className="text-slate-600 font-semibold py-3">Shift Lama</TableHead>
                 <TableHead className="text-slate-600 font-semibold py-3">Shift Baru</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3 pr-4">Tanggal Efektif</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Tanggal Efektif</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3 pr-4">Status Shift</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -773,13 +1098,14 @@ export default function ManagementEmployeePage() {
                     <TableCell className="pl-4"><Skeleton className="h-4 w-24" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                     <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell className="pr-4"><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                    <TableCell className="pr-4"><Skeleton className="h-5 w-24" /></TableCell>
                   </TableRow>
                 ))
               ) : history.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-center py-8 text-slate-400 pl-4">
-                    Belum ada riwayat perubahan shift
+                  <TableCell colSpan={5} className="text-center py-8 text-slate-400 pl-4">
+                    Belum ada perubahan shift hari ini
                   </TableCell>
                 </TableRow>
               ) : (
@@ -788,7 +1114,18 @@ export default function ManagementEmployeePage() {
                     <TableCell className="font-semibold text-slate-700 py-3 pl-4">{h.user_name}</TableCell>
                     <TableCell className="text-slate-500 py-3">{h.old_shift}</TableCell>
                     <TableCell className="text-slate-600 font-medium py-3">{h.new_shift}</TableCell>
-                    <TableCell className="text-slate-500 py-3 pr-4">{h.effective_date}</TableCell>
+                    <TableCell className="text-slate-500 py-3">{h.effective_date}</TableCell>
+                    <TableCell className="py-3 pr-4">
+                      {h.is_double ? (
+                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">
+                          Double Shift
+                        </span>
+                      ) : (
+                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
+                          Single Shift
+                        </span>
+                      )}
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -860,10 +1197,10 @@ export default function ManagementEmployeePage() {
                   className="pl-9 bg-white w-full h-9"
                 />
               </div>
-              {(attFilterDate || attFilterStatus !== 'all' || attFilterShift !== 'all' || attSearch) && (
+              {(attFilterDate !== todayStr || attFilterStatus !== 'all' || attFilterShift !== 'all' || attSearch) && (
                 <Button
                   variant="ghost"
-                  onClick={() => { setAttFilterDate(''); setAttFilterShift('all'); setAttFilterStatus('all'); setAttSearch(''); setAttPage(1) }}
+                  onClick={() => { setAttFilterDate(todayStr); setAttFilterShift('all'); setAttFilterStatus('all'); setAttSearch(''); setAttPage(1) }}
                   className="px-3 h-9"
                   title="Reset Filter"
                 >
@@ -881,13 +1218,12 @@ export default function ManagementEmployeePage() {
                   <TableHead className="w-[50px] pl-4">No</TableHead>
                   <TableHead>Nama</TableHead>
                   <TableHead>Shift</TableHead>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Check-in</TableHead>
-                  <TableHead>Istirahat Mulai</TableHead>
-                  <TableHead>Istirahat Selesai</TableHead>
-                  <TableHead>Durasi Istirahat</TableHead>
-                  <TableHead>Check-out</TableHead>
-                  <TableHead>Status</TableHead>
+                  <TableHead className="text-center">Tanggal</TableHead>
+                  <TableHead className="text-center">Jam Masuk</TableHead>
+                  <TableHead className="text-center">Istirahat</TableHead>
+                  <TableHead className="text-center">Jam Pulang</TableHead>
+                  <TableHead className="text-center">Jam Lembur</TableHead>
+                  <TableHead className="text-center">Status</TableHead>
                   <TableHead className="text-center pr-4">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -896,7 +1232,7 @@ export default function ManagementEmployeePage() {
                   Array.from({ length: 5 }).map((_, i) => (
                     <TableRow key={i}>
                       <TableCell className="pl-4"><Skeleton className="h-4 w-6" /></TableCell>
-                      {Array.from({ length: 9 }).map((_, j) => (
+                      {Array.from({ length: 7 }).map((_, j) => (
                         <TableCell key={j}><Skeleton className="h-4 w-full max-w-[90px]" /></TableCell>
                       ))}
                       <TableCell className="pr-4"><Skeleton className="h-4 w-8 mx-auto" /></TableCell>
@@ -904,7 +1240,7 @@ export default function ManagementEmployeePage() {
                   ))
                 ) : attRows.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={11} className="h-32 text-center text-slate-400">
+                    <TableCell colSpan={9} className="h-32 text-center text-slate-400">
                       Tidak ada data absensi ditemukan
                     </TableCell>
                   </TableRow>
@@ -914,35 +1250,110 @@ export default function ManagementEmployeePage() {
                       <TableCell className="font-mono text-xs text-slate-400 pl-4">{(attPage - 1) * PAGE_SIZE + i + 1}</TableCell>
                       <TableCell className="font-medium text-slate-700">{r.user_name}</TableCell>
                       <TableCell className="text-slate-500">{r.shift_name}</TableCell>
-                      <TableCell className="text-slate-500">{formatDate(r.date)}</TableCell>
-                      <TableCell className="text-slate-500">{r.check_in ? formatTime(r.check_in) : '—'}</TableCell>
-                      <TableCell className="text-slate-500">{r.break_start ? formatTime(r.break_start) : '—'}</TableCell>
-                      <TableCell className="text-slate-500">{r.break_end ? formatTime(r.break_end) : '—'}</TableCell>
-                      <TableCell>
+                      <TableCell className="text-slate-500 text-center">{formatDate(r.date)}</TableCell>
+                      <TableCell className="text-slate-500 text-center">{r.check_in ? formatTime(r.check_in) : '—'}</TableCell>
+                      <TableCell className="text-slate-500 text-center">
                         {(() => {
+                          if (!r.break_start) return '—'
+                          const start = formatTime(r.break_start)
+                          if (!r.break_end) return `${start} - --:--`
+                          const end = formatTime(r.break_end)
                           const dur = calculateBreakDuration(r.break_start, r.break_end)
                           return (
                             <span className={dur.isWarning ? "text-red-600 font-semibold" : "text-slate-500"}>
-                              {dur.text}
+                              {start} - {end}
                             </span>
                           )
                         })()}
                       </TableCell>
-                      <TableCell className="text-slate-500">{r.check_out ? formatTime(r.check_out) : '—'}</TableCell>
-                      <TableCell>
-                        <Badge variant={r.status === 'hadir' ? 'success' : r.status === 'izin' ? 'warning' : r.status === 'sakit' ? 'destructive' : 'default'}>
-                          {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                        </Badge>
+                      <TableCell className="text-slate-500 text-center">{r.check_out ? formatTime(r.check_out) : '—'}</TableCell>
+                      <TableCell className="text-slate-500 text-center">
+                        {(() => {
+                          const hasOt = r.overtime_check_in !== null || r.overtime_check_out !== null
+                          if (!hasOt) return <span className="text-slate-400">—</span>
+                          if (r.overtime_check_in && !r.overtime_check_out) {
+                            return (
+                              <span className="text-orange-500 font-medium text-xs whitespace-nowrap">
+                                Sedang Berlangsung
+                              </span>
+                            )
+                          }
+                          if (r.overtime_check_in && r.overtime_check_out) {
+                            return (
+                              <span className="text-slate-600 text-xs whitespace-nowrap">
+                                {formatTime(r.overtime_check_in)} - {formatTime(r.overtime_check_out)}
+                              </span>
+                            )
+                          }
+                          return <span className="text-slate-400">—</span>
+                        })()}
+                      </TableCell>
+                      <TableCell className="text-center">
+                        {(() => {
+                          const shiftLabel = r.shift_type === 'double' ? 'Double Shift' : r.shift_name !== '—' ? 'Single Shift' : 'Tidak Ada'
+                          const shiftColor = r.shift_type === 'double'
+                            ? { bg: '#FED7AA', text: '#9A3412' }
+                            : r.shift_name !== '—'
+                            ? { bg: '#DCFCE7', text: '#166534' }
+                            : { bg: '#F3F4F6', text: '#374151' }
+                          const statusColor = r.status === 'hadir'
+                            ? { bg: '#DCFCE7', text: '#166534' }
+                            : r.status === 'terlambat'
+                            ? { bg: '#FEF9C3', text: '#854D0E' }
+                            : r.status === 'absen' || r.status === 'alfa'
+                            ? { bg: '#FEE2E2', text: '#991B1B' }
+                            : r.status === 'sakit'
+                            ? { bg: '#DBEAFE', text: '#1E40AF' }
+                            : r.status === 'izin'
+                            ? { bg: '#EDE9FE', text: '#5B21B6' }
+                            : { bg: '#F3F4F6', text: '#374151' }
+                          const statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1)
+                          return (
+                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                              <span style={{ background: shiftColor.bg, color: shiftColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {shiftLabel}
+                              </span>
+                              <span className="text-slate-300 text-xs">/</span>
+                              <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                {statusLabel}
+                              </span>
+                            </div>
+                          )
+                        })()}
                       </TableCell>
                       <TableCell className="text-center pr-4">
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                          onClick={() => setSelectedAtt(r)}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
+                        <div className="flex items-center justify-center gap-1">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                            onClick={() => setSelectedAtt(r)}
+                            title="Detail"
+                          >
+                            <Eye className="h-4 w-4" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                            onClick={() => {
+                              setEditingAtt(r)
+                              setEditAttForm({
+                                check_in: r.check_in ? new Date(r.check_in).toTimeString().slice(0,5) : '',
+                                check_out: r.check_out ? new Date(r.check_out).toTimeString().slice(0,5) : '',
+                                break_start: r.break_start ? new Date(r.break_start).toTimeString().slice(0,5) : '',
+                                break_end: r.break_end ? new Date(r.break_end).toTimeString().slice(0,5) : '',
+                                status: r.status,
+                                notes: r.notes ?? '',
+                                overtime_in: r.overtime_check_in ? new Date(r.overtime_check_in).toTimeString().slice(0,5) : '',
+                                overtime_out: r.overtime_check_out ? new Date(r.overtime_check_out).toTimeString().slice(0,5) : '',
+                              })
+                            }}
+                            title="Edit"
+                          >
+                            <Edit2 className="h-4 w-4" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
@@ -978,62 +1389,106 @@ export default function ManagementEmployeePage() {
       {/* A. TAMBAH KARYAWAN BARU (MODAL DI TENGAH LAYAR) */}
       <AnimatePresence>
         {showAddModal && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <motion.div 
+          <div
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          >
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="bg-white rounded-xl shadow-xl w-full max-w-lg overflow-hidden p-6"
+              style={{ background: '#FFFFFF', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '560px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', overflowY: 'auto', maxHeight: '90vh' }}
             >
-              <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
-                <h3 className="font-bold text-slate-800 text-lg">➕ Tambah Karyawan Baru</h3>
-                <Button variant="ghost" size="icon" onClick={() => setShowAddModal(false)} className="h-8 w-8 rounded-full">
-                  <X className="w-4 h-4" />
-                </Button>
+              {/* Header: Judul + X button */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '24px' }}>
+                <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0F172A', margin: 0 }}>
+                  Tambah Karyawan Baru
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddModal(false)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                    background: '#F1F5F9', color: '#64748B', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '16px', fontWeight: 'bold', flexShrink: 0,
+                    transition: 'background 0.2s, color 0.2s, transform 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#FEE2E2'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = '#DC2626'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#F1F5F9'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = '#64748B'
+                    ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                  }}
+                  onMouseDown={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.9)'}
+                  onMouseUp={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'}
+                  title="Tutup"
+                >
+                  ✕
+                </button>
               </div>
-              <form onSubmit={handleAddUser} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-slate-600 mb-1">Nama Lengkap *</label>
+
+              <form onSubmit={handleAddUser}>
+                {/* Baris 1: Nama Lengkap + Email */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                      Nama Lengkap <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
                     <input
                       required
                       type="text"
                       value={addUserForm.name}
                       onChange={e => setAddUserForm(f => ({ ...f, name: e.target.value }))}
-                      placeholder="cth. Andi"
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
+                      placeholder="cth. Andi Pratama"
+                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                     />
                   </div>
-                  
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-slate-600 mb-1">Email *</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                      Email <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
                     <input
                       required
                       type="email"
                       value={addUserForm.email}
                       onChange={e => setAddUserForm(f => ({ ...f, email: e.target.value }))}
                       placeholder="cth. andi@domain.com"
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
+                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-slate-600 mb-1">Password * (Min. 6 Karakter)</label>
+                {/* Baris 2: Password + NIP */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                      Password <span style={{ color: '#EF4444' }}>*</span>
+                      <span style={{ fontWeight: '400', color: '#94A3B8', marginLeft: '4px' }}>(Min. 6 karakter)</span>
+                    </label>
                     <input
                       required
                       type="password"
                       value={addUserForm.password}
                       onChange={e => setAddUserForm(f => ({ ...f, password: e.target.value }))}
                       placeholder="••••••••"
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
+                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                     />
                   </div>
-                  
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-slate-600 mb-1">NIP * (6 digit)</label>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                      NIP <span style={{ color: '#EF4444' }}>*</span>
+                      <span style={{ fontWeight: '400', color: '#94A3B8', marginLeft: '4px' }}>(6 digit)</span>
+                    </label>
                     <input
                       required
                       maxLength={6}
@@ -1041,18 +1496,25 @@ export default function ManagementEmployeePage() {
                       value={addUserForm.nip}
                       onChange={e => setAddUserForm(f => ({ ...f, nip: e.target.value }))}
                       placeholder="cth. 123456"
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
+                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-slate-600 mb-1">Role *</label>
+                {/* Baris 3: Role + Shift Awal (2 kolom) */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                      Role <span style={{ color: '#EF4444' }}>*</span>
+                    </label>
                     <select
                       value={addUserForm.role}
                       onChange={e => setAddUserForm(f => ({ ...f, role: e.target.value }))}
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10 capitalize"
+                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none' }}
+                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                     >
                       <option value="supervisor">Supervisor</option>
                       <option value="leader">Leader</option>
@@ -1062,15 +1524,20 @@ export default function ManagementEmployeePage() {
                       <option value="gondola">Gondola</option>
                     </select>
                   </div>
-                  
-                  <div className="flex flex-col">
-                    <label className="text-sm font-medium text-slate-600 mb-1">Shift Awal</label>
+
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                      Shift Awal
+                      <span style={{ fontWeight: '400', color: '#94A3B8', marginLeft: '4px' }}>(Opsional)</span>
+                    </label>
                     <select
                       value={addUserForm.shiftId}
                       onChange={e => setAddUserForm(f => ({ ...f, shiftId: e.target.value }))}
-                      className="px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-10"
+                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none' }}
+                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
                     >
-                      <option value="">Pilih Shift (Opsional)</option>
+                      <option value="">Pilih Shift</option>
                       {shifts.map(s => (
                         <option key={s.id} value={s.id}>{s.name}</option>
                       ))}
@@ -1079,29 +1546,48 @@ export default function ManagementEmployeePage() {
                   </div>
                 </div>
 
-                <div className="flex justify-center gap-3 pt-4 border-t border-slate-100">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setShowAddModal(false)} 
-                    className="px-6 h-10"
-                  >
-                    Batal
-                  </Button>
-                  <Button 
-                    type="submit" 
+                {/* Action Button: Simpan full-width */}
+                <div style={{ marginTop: '28px' }}>
+                  <button
+                    type="submit"
                     disabled={addingUser}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-10"
+                    style={{
+                      width: '100%',
+                      padding: '11px',
+                      background: addingUser ? '#93C5FD' : '#3B82F6',
+                      color: '#FFFFFF',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: addingUser ? 'not-allowed' : 'pointer',
+                      transition: 'background 0.2s, transform 0.15s, box-shadow 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: '0 1px 3px rgba(59,130,246,0.3)',
+                    }}
+                    onMouseEnter={e => {
+                      if (!addingUser) {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'
+                        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(59,130,246,0.4)'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!addingUser) {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'
+                        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 3px rgba(59,130,246,0.3)'
+                        ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                      }
+                    }}
+                    onMouseDown={e => { if (!addingUser) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.98)' }}
+                    onMouseUp={e => { if (!addingUser) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)' }}
                   >
                     {addingUser ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Menyimpan...
-                      </>
-                    ) : (
-                      'Simpan'
-                    )}
-                  </Button>
+                      <><Loader2 className="w-4 h-4 animate-spin" />Menyimpan...</>
+                    ) : 'Simpan'}
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -1122,9 +1608,40 @@ export default function ManagementEmployeePage() {
             >
               <div className="flex items-center justify-between border-b border-slate-100 pb-4 mb-4">
                 <h3 className="font-bold text-slate-800 text-lg">✏️ Edit Data Karyawan</h3>
-                <Button variant="ghost" size="icon" onClick={() => setEditingUser(null)} className="h-8 w-8 rounded-full">
-                  <X className="w-4 h-4" />
-                </Button>
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  style={{
+                    width: '32px',
+                    height: '32px',
+                    borderRadius: '50%',
+                    border: 'none',
+                    background: '#F1F5F9',
+                    color: '#64748B',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    flexShrink: 0,
+                    transition: 'background 0.2s, color 0.2s, transform 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#FEE2E2'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = '#DC2626'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#F1F5F9'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = '#64748B'
+                    ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                  }}
+                  onMouseDown={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.9)'}
+                  onMouseUp={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'}
+                  title="Tutup"
+                >
+                  ✕
+                </button>
               </div>
               <form onSubmit={handleUpdateUser} className="space-y-4">
                 <div className="flex flex-col">
@@ -1188,29 +1705,48 @@ export default function ManagementEmployeePage() {
                   </select>
                 </div>
 
-                <div className="flex justify-center gap-3 pt-4 border-t border-slate-100">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    onClick={() => setEditingUser(null)} 
-                    className="px-6 h-10"
-                  >
-                    Batal
-                  </Button>
-                  <Button 
-                    type="submit" 
+                {/* Action Button: Simpan full-width */}
+                <div style={{ marginTop: '28px' }}>
+                  <button
+                    type="submit"
                     disabled={updatingUser}
-                    className="bg-blue-600 hover:bg-blue-700 text-white px-6 h-10"
+                    style={{
+                      width: '100%',
+                      padding: '11px',
+                      background: updatingUser ? '#93C5FD' : '#3B82F6',
+                      color: '#FFFFFF',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: updatingUser ? 'not-allowed' : 'pointer',
+                      transition: 'background 0.2s, transform 0.15s, box-shadow 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: '0 1px 3px rgba(59,130,246,0.3)',
+                    }}
+                    onMouseEnter={e => {
+                      if (!updatingUser) {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'
+                        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(59,130,246,0.4)'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!updatingUser) {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'
+                        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 3px rgba(59,130,246,0.3)'
+                        ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                      }
+                    }}
+                    onMouseDown={e => { if (!updatingUser) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.98)' }}
+                    onMouseUp={e => { if (!updatingUser) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)' }}
                   >
                     {updatingUser ? (
-                      <>
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Menyimpan...
-                      </>
-                    ) : (
-                      'Simpan'
-                    )}
-                  </Button>
+                      <><Loader2 className="w-4 h-4 animate-spin" />Menyimpan...</>
+                    ) : 'Simpan'}
+                  </button>
                 </div>
               </form>
             </motion.div>
@@ -1294,28 +1830,35 @@ export default function ManagementEmployeePage() {
                   <span className="text-slate-500">Nama</span>
                   <span className="font-medium text-slate-800">{selectedAtt.user_name}</span>
                   
-                  <span className="text-slate-500">Shift</span>
-                  <span className="font-medium text-slate-800">{selectedAtt.shift_name}</span>
-                  
                   <span className="text-slate-500">Tanggal</span>
                   <span className="font-medium text-slate-800">{formatDate(selectedAtt.date)}</span>
                   
-                  <span className="text-slate-500">Waktu</span>
-                  <span className="font-medium text-slate-800">
-                    {selectedAtt.check_in ? formatTime(selectedAtt.check_in) : '--:--'} s/d {selectedAtt.check_out ? formatTime(selectedAtt.check_out) : '--:--'}
-                  </span>
+                  <span className="text-slate-500">Jam Masuk</span>
+                  <span className="font-medium text-slate-800">{selectedAtt.check_in ? formatTime(selectedAtt.check_in) : '--:--'}</span>
 
                   <span className="text-slate-500">Istirahat</span>
                   <span className="font-medium text-slate-800 font-mono">
-                    {selectedAtt.break_start ? formatTime(selectedAtt.break_start) : '--:--'} s/d {selectedAtt.break_end ? formatTime(selectedAtt.break_end) : '--:--'}
-                    {selectedAtt.break_start && selectedAtt.break_end ? ` (${calculateBreakDuration(selectedAtt.break_start, selectedAtt.break_end).text})` : ''}
+                    {selectedAtt.break_start ? (selectedAtt.break_end ? `${formatTime(selectedAtt.break_start)} s/d ${formatTime(selectedAtt.break_end)}` : `${formatTime(selectedAtt.break_start)} s/d --:--`) : '--:--'}
                   </span>
+
+                  <span className="text-slate-500">Jam Pulang</span>
+                  <span className="font-medium text-slate-800">{selectedAtt.check_out ? formatTime(selectedAtt.check_out) : '--:--'}</span>
                   
-                  <span className="text-slate-500">Status</span>
+                  <span className="text-slate-500">Shift</span>
                   <div>
-                    <Badge variant={selectedAtt.status === 'hadir' ? 'success' : selectedAtt.status === 'izin' ? 'warning' : selectedAtt.status === 'sakit' ? 'destructive' : 'default'}>
-                      {selectedAtt.status.charAt(0).toUpperCase() + selectedAtt.status.slice(1)}
-                    </Badge>
+                    {(() => {
+                      const shiftLabel = selectedAtt.shift_type === 'double' ? 'Double Shift' : selectedAtt.shift_name !== '—' ? 'Single Shift' : 'Tidak Ada'
+                      const shiftColor = selectedAtt.shift_type === 'double' ? { bg: '#FED7AA', text: '#9A3412' } : selectedAtt.shift_name !== '—' ? { bg: '#DCFCE7', text: '#166534' } : { bg: '#F3F4F6', text: '#374151' }
+                      return <span style={{ background: shiftColor.bg, color: shiftColor.text, padding: '2px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600 }}>{shiftLabel}</span>
+                    })()}
+                  </div>
+
+                  <span className="text-slate-500">Status</span>
+                  <div className="flex items-center gap-2">
+                    {(() => {
+                      const statusColor = selectedAtt.status === 'hadir' ? { bg: '#DCFCE7', text: '#166534' } : selectedAtt.status === 'terlambat' ? { bg: '#FEF9C3', text: '#854D0E' } : selectedAtt.status === 'absen' || selectedAtt.status === 'alfa' ? { bg: '#FEE2E2', text: '#991B1B' } : selectedAtt.status === 'sakit' ? { bg: '#DBEAFE', text: '#1E40AF' } : selectedAtt.status === 'izin' ? { bg: '#EDE9FE', text: '#5B21B6' } : { bg: '#F3F4F6', text: '#374151' }
+                      return <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600 }}>{selectedAtt.status.charAt(0).toUpperCase() + selectedAtt.status.slice(1)}</span>
+                    })()}
                   </div>
                   
                   <span className="text-slate-500">Lokasi</span>
@@ -1339,6 +1882,245 @@ export default function ManagementEmployeePage() {
               </div>
             </motion.div>
           </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* E. EDIT ABSENSI MODAL */}
+      <AnimatePresence>
+        {editingAtt && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              style={{ background: '#FFFFFF', borderRadius: '16px', padding: '32px', width: '100%', maxWidth: '520px', boxShadow: '0 20px 60px rgba(0,0,0,0.15)', overflowY: 'auto', maxHeight: '90vh' }}
+            >
+              {/* Header: Judul + X button */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: '8px' }}>
+                <div>
+                  <h3 style={{ fontSize: '18px', fontWeight: 'bold', color: '#0F172A', margin: 0 }}>Edit Absensi</h3>
+                  <p style={{ fontSize: '13px', color: '#64748B', marginTop: '4px', marginBottom: 0 }}>{editingAtt.user_name} — {formatDate(editingAtt.date)}</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setEditingAtt(null)}
+                  style={{
+                    width: '32px', height: '32px', borderRadius: '50%', border: 'none',
+                    background: '#F1F5F9', color: '#64748B', cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    fontSize: '16px', fontWeight: 'bold', flexShrink: 0,
+                    transition: 'background 0.2s, color 0.2s, transform 0.15s',
+                  }}
+                  onMouseEnter={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#FEE2E2'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = '#DC2626'
+                  }}
+                  onMouseLeave={e => {
+                    (e.currentTarget as HTMLButtonElement).style.background = '#F1F5F9'
+                    ;(e.currentTarget as HTMLButtonElement).style.color = '#64748B'
+                    ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                  }}
+                  onMouseDown={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.9)'}
+                  onMouseUp={e => (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'}
+                  title="Tutup"
+                >
+                  ✕
+                </button>
+              </div>
+              <div style={{ height: '16px' }} />
+
+              <form onSubmit={async (e) => {
+                e.preventDefault()
+                setSavingAtt(true)
+                try {
+                  // Helper: convert time HH:mm to timestamp. If hour < 12, assume next day (overnight)
+                  const toTs = (date: string, time: string) => {
+                    if (!time) return null
+                    const hour = parseInt(time.split(':')[0], 10)
+                    if (hour < 12) {
+                      const d = new Date(date)
+                      d.setDate(d.getDate() + 1)
+                      return `${d.toISOString().split('T')[0]}T${time}:00`
+                    }
+                    return `${date}T${time}:00`
+                  }
+                  const toTsSameDay = (date: string, time: string) => time ? `${date}T${time}:00` : null
+
+                  // 1. Update attendance table
+                  const { error } = await supabase.from('attendance').update({
+                    check_in_time: toTsSameDay(editingAtt.date, editAttForm.check_in),
+                    check_out_time: toTs(editingAtt.date, editAttForm.check_out),
+                    break_start: toTs(editingAtt.date, editAttForm.break_start),
+                    break_end: toTs(editingAtt.date, editAttForm.break_end),
+                    status: editAttForm.status,
+                    note: editAttForm.notes || null,
+                  }).eq('id', editingAtt.id)
+                  if (error) throw error
+
+                  // 2. If double shift, also update overtime_assignments
+                  if (editingAtt.shift_type === 'double') {
+                    const { data: existingOT } = await supabase
+                      .from('overtime_assignments')
+                      .select('id')
+                      .eq('user_id', editingAtt.user_id)
+                      .eq('assignment_date', editingAtt.date)
+                      .maybeSingle()
+
+                    const otPayload = {
+                      user_id: editingAtt.user_id,
+                      assignment_date: editingAtt.date,
+                      overtime_check_in: toTs(editingAtt.date, editAttForm.overtime_in),
+                      overtime_check_out: toTs(editingAtt.date, editAttForm.overtime_out),
+                    }
+
+                    if (existingOT) {
+                      await supabase.from('overtime_assignments').update(otPayload).eq('id', existingOT.id)
+                    } else if (editAttForm.overtime_in || editAttForm.overtime_out) {
+                      await supabase.from('overtime_assignments').insert({ ...otPayload, status: 'active' })
+                    }
+                  }
+
+                  toast.success('Data absensi berhasil diperbarui!')
+                  queryClient.invalidateQueries({ queryKey: ['attendance'] })
+                  setEditingAtt(null)
+                } catch (err: any) {
+                  toast.error(err.message || 'Gagal menyimpan perubahan')
+                } finally {
+                  setSavingAtt(false)
+                }
+              }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                  {/* Nama (readonly) */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Nama</label>
+                    <input value={editingAtt.user_name} readOnly style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#64748B', background: '#F8FAFC', boxSizing: 'border-box' }} />
+                  </div>
+                  {/* Tanggal (readonly) */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Tanggal</label>
+                    <input value={formatDate(editingAtt.date)} readOnly style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#64748B', background: '#F8FAFC', boxSizing: 'border-box' }} />
+                  </div>
+                  {/* Jam Masuk */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Jam Masuk</label>
+                    <input type="time" value={editAttForm.check_in} onChange={e => setEditAttForm(f => ({ ...f, check_in: e.target.value }))} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }} />
+                  </div>
+                  {/* Jam Pulang */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Jam Pulang</label>
+                    <input type="time" value={editAttForm.check_out} onChange={e => setEditAttForm(f => ({ ...f, check_out: e.target.value }))} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }} />
+                  </div>
+                  {/* Istirahat Mulai */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Istirahat Mulai</label>
+                    <input type="time" value={editAttForm.break_start} onChange={e => setEditAttForm(f => ({ ...f, break_start: e.target.value }))} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }} />
+                  </div>
+                  {/* Istirahat Selesai */}
+                  <div>
+                    <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Istirahat Selesai</label>
+                    <input type="time" value={editAttForm.break_end} onChange={e => setEditAttForm(f => ({ ...f, break_end: e.target.value }))} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }} />
+                  </div>
+                </div>
+
+                {/* Status Kehadiran */}
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Status Kehadiran <span style={{ color: '#EF4444' }}>*</span></label>
+                  <select value={editAttForm.status} onChange={e => setEditAttForm(f => ({ ...f, status: e.target.value }))} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}>
+                    <option value="hadir">Hadir</option>
+                    <option value="terlambat">Terlambat</option>
+                    <option value="sakit">Sakit</option>
+                    <option value="izin">Izin</option>
+                    <option value="absen">Absen</option>
+                  </select>
+                </div>
+
+                {/* Catatan */}
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Catatan</label>
+                  <textarea value={editAttForm.notes} onChange={e => setEditAttForm(f => ({ ...f, notes: e.target.value }))} placeholder="Catatan tambahan (opsional)..." rows={3} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', resize: 'vertical', boxSizing: 'border-box' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }} />
+                </div>
+
+                {/* Overtime fields — only shown for double shift */}
+                {editingAtt.shift_type === 'double' && (
+                  <div style={{ marginTop: '16px', padding: '14px 16px', background: '#FFF7ED', borderRadius: '10px', border: '1px solid #FED7AA' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '12px' }}>
+                      <span style={{ fontSize: '13px', fontWeight: '600', color: '#C2410C' }}>⏱ Jam Lembur (Double Shift)</span>
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#92400E', marginBottom: '4px' }}>Mulai Lembur</label>
+                        <input
+                          type="time"
+                          value={editAttForm.overtime_in}
+                          onChange={e => setEditAttForm(f => ({ ...f, overtime_in: e.target.value }))}
+                          style={{ width: '100%', padding: '10px 14px', border: '1px solid #FDBA74', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.border = '1px solid #F97316'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(249,115,22,0.15)' }}
+                          onBlur={e => { e.currentTarget.style.border = '1px solid #FDBA74'; e.currentTarget.style.boxShadow = 'none' }}
+                        />
+                      </div>
+                      <div>
+                        <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#92400E', marginBottom: '4px' }}>Selesai Lembur</label>
+                        <input
+                          type="time"
+                          value={editAttForm.overtime_out}
+                          onChange={e => setEditAttForm(f => ({ ...f, overtime_out: e.target.value }))}
+                          style={{ width: '100%', padding: '10px 14px', border: '1px solid #FDBA74', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                          onFocus={e => { e.currentTarget.style.border = '1px solid #F97316'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(249,115,22,0.15)' }}
+                          onBlur={e => { e.currentTarget.style.border = '1px solid #FDBA74'; e.currentTarget.style.boxShadow = 'none' }}
+                        />
+                      </div>
+                    </div>
+                    <p style={{ fontSize: '11px', color: '#92400E', marginTop: '8px', margin: '8px 0 0 0' }}>💡 Jika selesai lembur melewati tengah malam, masukkan jam &lt; 12:00 (sistem otomatis hari berikutnya)</p>
+                  </div>
+                )}
+
+                {/* Action Button: Simpan full-width */}
+                <div style={{ marginTop: '28px' }}>
+                  <button
+                    type="submit"
+                    disabled={savingAtt}
+                    style={{
+                      width: '100%',
+                      padding: '11px',
+                      background: savingAtt ? '#93C5FD' : '#3B82F6',
+                      color: '#FFFFFF',
+                      fontSize: '14px',
+                      fontWeight: '600',
+                      borderRadius: '8px',
+                      border: 'none',
+                      cursor: savingAtt ? 'not-allowed' : 'pointer',
+                      transition: 'background 0.2s, transform 0.15s, box-shadow 0.2s',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '8px',
+                      boxShadow: '0 1px 3px rgba(59,130,246,0.3)',
+                    }}
+                    onMouseEnter={e => {
+                      if (!savingAtt) {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'
+                        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 4px 12px rgba(59,130,246,0.4)'
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!savingAtt) {
+                        (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'
+                        ;(e.currentTarget as HTMLButtonElement).style.boxShadow = '0 1px 3px rgba(59,130,246,0.3)'
+                        ;(e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'
+                      }
+                    }}
+                    onMouseDown={e => { if (!savingAtt) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.98)' }}
+                    onMouseUp={e => { if (!savingAtt) (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)' }}
+                  >
+                    {savingAtt ? (
+                      <><Loader2 className="w-4 h-4 animate-spin" />Menyimpan...</>
+                    ) : 'Simpan'}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </motion.div>

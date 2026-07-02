@@ -3,6 +3,8 @@
 import { usePathname } from 'next/navigation'
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useState, useEffect } from 'react'
 
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
@@ -18,6 +20,19 @@ export default function Topbar() {
   const pathname = usePathname()
   const title = pageTitles[pathname] ?? 'Dashboard'
 
+  const [userEmail, setUserEmail] = useState('')
+  const [userName, setUserName] = useState('Super Admin')
+
+  useEffect(() => {
+    async function getUser() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (user?.email) setUserEmail(user.email)
+      if (user?.user_metadata?.full_name) setUserName(user.user_metadata.full_name)
+    }
+    getUser()
+  }, [])
+
   return (
     <header className="h-16 bg-white border-b border-slate-200 shadow-sm flex items-center justify-between px-6 shrink-0">
       {/* Breadcrumb Left */}
@@ -29,7 +44,17 @@ export default function Topbar() {
         <span className="font-semibold text-slate-800">{title}</span>
       </div>
 
-
+      {/* Right side: User info */}
+      <div className="flex flex-col items-end">
+        <span className="text-[14px] font-bold leading-tight" style={{ color: '#0F172A' }}>
+          {userName}
+        </span>
+        {userEmail && (
+          <span className="text-[12px] leading-tight mt-0.5" style={{ color: '#64748B' }}>
+            {userEmail}
+          </span>
+        )}
+      </div>
     </header>
   )
 }

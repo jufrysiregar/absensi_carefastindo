@@ -92,6 +92,12 @@ class TabDashboardFragment : Fragment() {
 
         swipeRefresh.setOnRefreshListener { loadDashboardData() }
 
+        val btnAssignLemburAdmin = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnAssignLemburAdmin)
+        btnAssignLemburAdmin?.visibility = View.VISIBLE
+        btnAssignLemburAdmin?.setOnClickListener {
+            startActivity(android.content.Intent(requireContext(), AssignLemburActivity::class.java))
+        }
+
         loadDashboardData()
         return view
     }

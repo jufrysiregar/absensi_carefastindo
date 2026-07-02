@@ -56,6 +56,18 @@
                             android:textStyle="bold" />
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
+                <!-- Assign Lembur Button -->
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnAssignLemburAdmin"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="⚡ Assign Lembur"
+                    android:textColor="@color/white"
+                    android:backgroundTint="@color/accent"
+                    app:cornerRadius="12dp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="24dp"
+                    android:visibility="gone" />
 
                 <!-- Section Title -->
                 <TextView
