@@ -1,5 +1,0 @@
-https://rbhloslxavnlhnruzewo.supabase.co/rest/v1/
-
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJiaGxvc2x4YXZubGhucnV6ZXdvIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkxNjU5MDAsImV4cCI6MjA5NDc0MTkwMH0.Skisq_2ltA3oiFtInr9Qt59RbU-6VYIlnWMAA3hKvUo
-
-
