@@ -12,7 +12,6 @@ const navItems = [
   { href: '/dashboard', label: 'Dashboard' },
   { href: '/dashboard/qr-code', label: 'QR Generator' },
   { href: '/dashboard/users', label: 'Management Employee' },
-  { href: '/dashboard/emergency', label: 'Darurat & Lembur' },
   { href: '/dashboard/leave-requests', label: 'Leave Requests' },
   { href: '/dashboard/reports', label: 'Reports' },
   { href: '/dashboard/announcements', label: 'Announcements' },

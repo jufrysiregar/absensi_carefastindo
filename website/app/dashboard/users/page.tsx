@@ -5,7 +5,7 @@ import { createClient } from '@/lib/supabase/client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useDebounce } from '@/hooks/useDebounce'
 import { formatDate, formatTime } from '@/lib/utils'
-import { Search, X, Plus, Edit2, Trash2, Loader2, Eye, Download } from 'lucide-react'
+import { Search, X, Plus, Edit2, Trash2, Loader2, Eye, Download, AlertTriangle, Clock } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
@@ -76,6 +76,30 @@ interface OvertimeRow {
   overtime_in: string | null
   overtime_out: string | null
   duration: number | null
+  created_at: string
+}
+
+// ─── Off Day types ───────────────────────────────────────
+interface OffDayRow {
+  id: string
+  user_id: string
+  user_name: string
+  effective_date: string
+  reason: string | null
+}
+
+// ─── Emergency types ─────────────────────────────────────
+interface EmergencyRow {
+  id: string
+  assigned_user_id: string
+  assigned_user_name: string
+  replacing_user_id: string | null
+  replacing_user_name: string | null
+  shift_id: string | null
+  shift_name: string | null
+  target_date: string
+  reason: 'lembur' | 'ganti_off'
+  status: string
   created_at: string
 }
 
@@ -153,7 +177,31 @@ export default function ManagementEmployeePage() {
 
   // Attendance table filters & pagination
   const todayStr = new Date().toISOString().split('T')[0]
-  const [attPage, setAttPage] = useState(1)
+
+  // ─── Off Day state ──────────────────────────────────────
+  const [offForm, setOffForm] = useState({
+    userId: '',
+    offDate: new Date().toISOString().split('T')[0],
+    reason: 'libur',
+  })
+  const [savingOff, setSavingOff] = useState(false)
+  const [deleteOffId, setDeleteOffId] = useState<string | null>(null)
+
+  // ─── Emergency state ────────────────────────────────────
+  const [emergencyForm, setEmergencyForm] = useState({
+    assigned_user_id: '',
+    target_date: new Date().toISOString().split('T')[0],
+    reason: 'lembur' as 'lembur' | 'ganti_off',
+    replacing_user_id: '',
+    shift_id: '',
+    status: 'pending',
+  })
+  const [editEmergencyRow, setEditEmergencyRow] = useState<EmergencyRow | null>(null)
+  const [showEmergencyForm, setShowEmergencyForm] = useState(false)
+  const [deleteEmergencyId, setDeleteEmergencyId] = useState<string | null>(null)
+  // For filtering users who are off on a specific date (ganti_off)
+  const [offUsersOnDate, setOffUsersOnDate] = useState<{ id: string; name: string }[]>([])
+  const [loadingOffUsers, setLoadingOffUsers] = useState(false)  const [attPage, setAttPage] = useState(1)
   const [attSearch, setAttSearch] = useState('')
   const [attFilterDate, setAttFilterDate] = useState(todayStr)
   const [attFilterShift, setAttFilterShift] = useState('all')
@@ -626,6 +674,189 @@ export default function ManagementEmployeePage() {
     }
   })
 
+  // ─── Off Day queries & mutations ─────────────────────────
+  const { data: offDays = [], isLoading: offDaysLoading } = useQuery<OffDayRow[]>({
+    queryKey: ['offDays'],
+    queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0]
+      const nextWeek = new Date()
+      nextWeek.setDate(nextWeek.getDate() + 7)
+      const nextWeekStr = nextWeek.toISOString().split('T')[0]
+
+      const { data, error } = await supabase
+        .from('user_shifts')
+        .select('id, user_id, effective_date, reason, users(name)')
+        .is('shift_id', null)
+        .eq('shift_type', 'off')
+        .gte('effective_date', today)
+        .lte('effective_date', nextWeekStr)
+        .order('effective_date', { ascending: true })
+
+      if (error) throw error
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        user_id: r.user_id,
+        user_name: r.users?.name ?? '—',
+        effective_date: r.effective_date,
+        reason: r.reason ?? 'libur',
+      }))
+    }
+  })
+
+  async function handleSetOff(e: React.FormEvent) {
+    e.preventDefault()
+    if (!offForm.userId || !offForm.offDate || !offForm.reason) {
+      toast.error('Semua field wajib diisi!'); return
+    }
+    setSavingOff(true)
+    try {
+      const { error } = await supabase.from('user_shifts').insert({
+        user_id: offForm.userId,
+        shift_id: null,
+        shift_type: 'off',
+        reason: offForm.reason,
+        effective_date: offForm.offDate,
+      })
+      if (error) throw error
+      toast.success('Hari off berhasil diset!')
+      setOffForm({ userId: '', offDate: new Date().toISOString().split('T')[0], reason: 'libur' })
+      queryClient.invalidateQueries({ queryKey: ['offDays'] })
+    } catch (err: any) {
+      toast.error('Gagal: ' + err.message)
+    } finally {
+      setSavingOff(false)
+    }
+  }
+
+  const deleteOffMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('user_shifts').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('Data off berhasil dihapus!')
+      queryClient.invalidateQueries({ queryKey: ['offDays'] })
+      setDeleteOffId(null)
+    },
+    onError: (e: any) => toast.error('Gagal menghapus: ' + e.message)
+  })
+
+  // ─── Emergency queries & mutations ───────────────────────
+  const { data: emergencyRows = [], isLoading: emergencyLoading } = useQuery<EmergencyRow[]>({
+    queryKey: ['emergency-users'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('emergency_assignments')
+        .select('id, assigned_user_id, replacing_user_id, shift_id, target_date, reason, status, created_at, assigned_user:users!emergency_assignments_assigned_user_id_fkey(name), replacing_user:users!emergency_assignments_replacing_user_id_fkey(name), shift:shifts(name)')
+        .order('created_at', { ascending: false })
+        .limit(30)
+      if (error) throw error
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        assigned_user_id: r.assigned_user_id,
+        assigned_user_name: r.assigned_user?.name ?? '—',
+        replacing_user_id: r.replacing_user_id ?? null,
+        replacing_user_name: r.replacing_user?.name ?? null,
+        shift_id: r.shift_id ?? null,
+        shift_name: r.shift?.name ?? null,
+        target_date: r.target_date,
+        reason: r.reason,
+        status: r.status ?? 'pending',
+        created_at: r.created_at,
+      }))
+    }
+  })
+
+  const saveEmergencyMutation = useMutation({
+    mutationFn: async (payload: typeof emergencyForm & { id?: string }) => {
+      const body: any = {
+        assigned_user_id: payload.assigned_user_id,
+        target_date: payload.target_date,
+        reason: payload.reason,
+        replacing_user_id: payload.reason === 'ganti_off' ? payload.replacing_user_id || null : null,
+        shift_id: payload.reason === 'lembur' ? payload.shift_id || null : null,
+        status: payload.status,
+        assigned_from: 'website',
+      }
+      if (payload.id) {
+        const { error } = await supabase.from('emergency_assignments').update(body).eq('id', payload.id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('emergency_assignments').insert(body)
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success(editEmergencyRow ? 'Penugasan diupdate!' : 'Penugasan disimpan!')
+      queryClient.invalidateQueries({ queryKey: ['emergency-users'] })
+      resetEmergencyForm()
+    },
+    onError: (e: any) => toast.error('Gagal: ' + e.message)
+  })
+
+  const deleteEmergencyMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase.from('emergency_assignments').delete().eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      toast.success('Penugasan dihapus!')
+      queryClient.invalidateQueries({ queryKey: ['emergency-users'] })
+      setDeleteEmergencyId(null)
+    },
+    onError: (e: any) => toast.error('Gagal: ' + e.message)
+  })
+
+  function resetEmergencyForm() {
+    setEmergencyForm({ assigned_user_id: '', target_date: new Date().toISOString().split('T')[0], reason: 'lembur', replacing_user_id: '', shift_id: '', status: 'pending' })
+    setEditEmergencyRow(null)
+    setShowEmergencyForm(false)
+    setOffUsersOnDate([])
+  }
+
+  async function loadOffUsersOnDate(date: string) {
+    if (!date) { setOffUsersOnDate([]); return }
+    setLoadingOffUsers(true)
+    try {
+      const { data } = await supabase
+        .from('user_shifts')
+        .select('user_id, users(name)')
+        .is('shift_id', null)
+        .eq('shift_type', 'off')
+        .eq('effective_date', date)
+      setOffUsersOnDate((data ?? []).map((r: any) => ({ id: r.user_id, name: r.users?.name ?? '—' })))
+    } catch {
+      setOffUsersOnDate([])
+    } finally {
+      setLoadingOffUsers(false)
+    }
+  }
+
+  function handleSubmitEmergency(e: React.FormEvent) {
+    e.preventDefault()
+    if (!emergencyForm.assigned_user_id || !emergencyForm.target_date) {
+      toast.error('Karyawan dan tanggal wajib diisi!'); return
+    }
+    if (emergencyForm.reason === 'ganti_off' && !emergencyForm.replacing_user_id) {
+      toast.error('Karyawan yang digantikan wajib diisi!'); return
+    }
+    saveEmergencyMutation.mutate({ ...emergencyForm, id: editEmergencyRow?.id })
+  }
+
+  function openEditEmergency(row: EmergencyRow) {
+    setEditEmergencyRow(row)
+    setEmergencyForm({
+      assigned_user_id: row.assigned_user_id,
+      target_date: row.target_date,
+      reason: row.reason,
+      replacing_user_id: row.replacing_user_id ?? '',
+      shift_id: row.shift_id ?? '',
+      status: row.status,
+    })
+    if (row.reason === 'ganti_off') loadOffUsersOnDate(row.target_date)
+    setShowEmergencyForm(true)
+  }
+
 
 
   // Export excel function
@@ -1073,6 +1304,339 @@ export default function ManagementEmployeePage() {
           </div>
         </form>
       </div>
+
+      {/* 3. ATUR HARI OFF KARYAWAN */}
+      <Card className="shadow-sm">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
+          <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+            🏖️ Atur Hari Off Karyawan
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-4">
+          {/* Form Set Off */}
+          <form onSubmit={handleSetOff}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan *</label>
+                <select
+                  value={offForm.userId}
+                  onChange={e => setOffForm(f => ({ ...f, userId: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  <option value="">-- Pilih Karyawan --</option>
+                  {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
+                    <option key={u.id} value={u.id}>{u.name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal Off *</label>
+                <input
+                  type="date"
+                  value={offForm.offDate}
+                  onChange={e => setOffForm(f => ({ ...f, offDate: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Alasan Off *</label>
+                <select
+                  value={offForm.reason}
+                  onChange={e => setOffForm(f => ({ ...f, reason: e.target.value }))}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  <option value="libur">Libur</option>
+                  <option value="sakit">Sakit</option>
+                  <option value="cuti">Cuti</option>
+                  <option value="lainnya">Lainnya</option>
+                </select>
+              </div>
+            </div>
+            <div className="flex gap-3 mt-4">
+              <button
+                type="submit"
+                disabled={savingOff}
+                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all"
+                style={{ background: '#F97316' }}
+                onMouseEnter={e => { if (!savingOff) (e.currentTarget as HTMLButtonElement).style.background = '#EA580C' }}
+                onMouseLeave={e => { if (!savingOff) (e.currentTarget as HTMLButtonElement).style.background = '#F97316' }}
+              >
+                {savingOff && <Loader2 className="w-4 h-4 animate-spin" />}
+                Set Off
+              </button>
+              <button
+                type="button"
+                onClick={() => setOffForm({ userId: '', offDate: new Date().toISOString().split('T')[0], reason: 'libur' })}
+                className="px-5 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
+              >
+                Batal
+              </button>
+            </div>
+          </form>
+
+          {/* Tabel Hari Off 7 hari ke depan */}
+          <div>
+            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Jadwal Off (7 hari ke depan)</p>
+            <Table>
+              <TableHeader className="bg-slate-50">
+                <TableRow>
+                  <TableHead className="pl-4">Karyawan</TableHead>
+                  <TableHead>Tanggal</TableHead>
+                  <TableHead>Alasan</TableHead>
+                  <TableHead className="text-center pr-4">Aksi</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {offDaysLoading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <TableRow key={i}>
+                      {Array.from({ length: 4 }).map((_, j) => (
+                        <TableCell key={j}><div className="h-4 bg-slate-100 rounded animate-pulse w-full" /></TableCell>
+                      ))}
+                    </TableRow>
+                  ))
+                ) : offDays.length === 0 ? (
+                  <TableRow>
+                    <TableCell colSpan={4} className="text-center py-6 text-slate-400 pl-4">
+                      Tidak ada jadwal off dalam 7 hari ke depan
+                    </TableCell>
+                  </TableRow>
+                ) : offDays.map(od => (
+                  <TableRow key={od.id} className="hover:bg-slate-50/50">
+                    <TableCell className="font-medium text-slate-800 pl-4">{od.user_name}</TableCell>
+                    <TableCell className="text-slate-600">{od.effective_date}</TableCell>
+                    <TableCell>
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize bg-orange-100 text-orange-700">
+                        {od.reason}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-center pr-4">
+                      <button
+                        onClick={() => setDeleteOffId(od.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 transition-all mx-auto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* 4. DARURAT & LEMBUR */}
+      <Card className="shadow-sm">
+        <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
+              ⚡ Darurat &amp; Lembur
+            </CardTitle>
+            <button
+              onClick={() => { setEditEmergencyRow(null); setEmergencyForm({ assigned_user_id: '', target_date: new Date().toISOString().split('T')[0], reason: 'lembur', replacing_user_id: '', shift_id: '', status: 'pending' }); setOffUsersOnDate([]); setShowEmergencyForm(true) }}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all"
+            >
+              <Plus className="w-4 h-4" /> Tambah
+            </button>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          {/* Inline form — muncul kalau showEmergencyForm */}
+          {showEmergencyForm && (
+            <div className="p-4 border-b border-slate-100 bg-slate-50/50 space-y-4">
+              <form onSubmit={handleSubmitEmergency} className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan Ditugaskan *</label>
+                    <select
+                      value={emergencyForm.assigned_user_id}
+                      onChange={e => setEmergencyForm(f => ({ ...f, assigned_user_id: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Pilih Karyawan --</option>
+                      {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
+                        <option key={u.id} value={u.id}>{u.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal *</label>
+                    <input
+                      type="date"
+                      value={emergencyForm.target_date}
+                      onChange={e => {
+                        setEmergencyForm(f => ({ ...f, target_date: e.target.value, replacing_user_id: '' }))
+                        if (emergencyForm.reason === 'ganti_off') loadOffUsersOnDate(e.target.value)
+                      }}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-2">Tipe Penugasan *</label>
+                  <div className="flex gap-6">
+                    {(['lembur', 'ganti_off'] as const).map(r => (
+                      <label key={r} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="radio" value={r} checked={emergencyForm.reason === r}
+                          onChange={() => {
+                            setEmergencyForm(f => ({ ...f, reason: r, replacing_user_id: '', shift_id: '' }))
+                            if (r === 'ganti_off') loadOffUsersOnDate(emergencyForm.target_date)
+                            else setOffUsersOnDate([])
+                          }}
+                          className="accent-blue-600"
+                        />
+                        <span className="text-sm font-medium">{r === 'ganti_off' ? 'Ganti Off' : 'Lembur'}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                {emergencyForm.reason === 'ganti_off' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">
+                      Karyawan Digantikan *
+                      <span className="text-xs font-normal text-slate-400 ml-1">(hanya karyawan yang off pada tanggal tersebut)</span>
+                    </label>
+                    {loadingOffUsers ? (
+                      <div className="text-sm text-slate-400 py-2">Memuat karyawan yang off...</div>
+                    ) : offUsersOnDate.length === 0 ? (
+                      <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
+                        Tidak ada karyawan yang off pada tanggal ini. Set hari off terlebih dahulu di section di atas.
+                      </div>
+                    ) : (
+                      <select
+                        value={emergencyForm.replacing_user_id}
+                        onChange={e => setEmergencyForm(f => ({ ...f, replacing_user_id: e.target.value }))}
+                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      >
+                        <option value="">-- Pilih Karyawan --</option>
+                        {offUsersOnDate.filter(u => u.id !== emergencyForm.assigned_user_id).map(u => (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {emergencyForm.reason === 'lembur' && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Shift Lembur</label>
+                    <select
+                      value={emergencyForm.shift_id}
+                      onChange={e => setEmergencyForm(f => ({ ...f, shift_id: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="">-- Pilih Shift --</option>
+                      {shifts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                  </div>
+                )}
+
+                {editEmergencyRow && (
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Status</label>
+                    <select
+                      value={emergencyForm.status}
+                      onChange={e => setEmergencyForm(f => ({ ...f, status: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="active">Aktif</option>
+                      <option value="selesai">Selesai</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="flex gap-3">
+                  <button
+                    type="submit"
+                    disabled={saveEmergencyMutation.isPending}
+                    className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-all"
+                  >
+                    {saveEmergencyMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {editEmergencyRow ? 'Simpan Perubahan' : 'Tambah Penugasan'}
+                  </button>
+                  <button type="button" onClick={resetEmergencyForm}
+                    className="px-5 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
+                    Batal
+                  </button>
+                </div>
+              </form>
+            </div>
+          )}
+
+          <Table>
+            <TableHeader className="bg-slate-50">
+              <TableRow>
+                <TableHead className="pl-4">No</TableHead>
+                <TableHead>Karyawan</TableHead>
+                <TableHead>Tanggal</TableHead>
+                <TableHead>Tipe</TableHead>
+                <TableHead>Detail</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead className="text-center pr-4">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {emergencyLoading ? (
+                Array.from({ length: 4 }).map((_, i) => (
+                  <TableRow key={i}>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <TableCell key={j}><div className="h-4 bg-slate-100 rounded animate-pulse w-full" /></TableCell>
+                    ))}
+                  </TableRow>
+                ))
+              ) : emergencyRows.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-slate-400">
+                    Belum ada penugasan darurat
+                  </TableCell>
+                </TableRow>
+              ) : emergencyRows.map((row, idx) => (
+                <TableRow key={row.id} className="hover:bg-slate-50/50">
+                  <TableCell className="pl-4 text-slate-400 text-sm">{idx + 1}</TableCell>
+                  <TableCell className="font-medium text-slate-800">{row.assigned_user_name}</TableCell>
+                  <TableCell className="text-slate-600 text-sm">{row.target_date}</TableCell>
+                  <TableCell>
+                    {row.reason === 'lembur' ? (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Lembur</span>
+                    ) : (
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Ganti Off</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-slate-600 text-sm">
+                    {row.reason === 'ganti_off' ? (row.replacing_user_name ?? '—') : (row.shift_name ?? '—')}
+                  </TableCell>
+                  <TableCell>
+                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
+                      row.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
+                      row.status === 'active' ? 'bg-green-100 text-green-800' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>
+                      {row.status}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-center pr-4">
+                    <div className="flex items-center justify-center gap-1">
+                      <button onClick={() => openEditEmergency(row)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-blue-500 hover:bg-blue-50 transition-all">
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button onClick={() => setDeleteEmergencyId(row.id)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 transition-all">
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
 
       <Card className="shadow-sm">
         <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
@@ -2123,11 +2687,59 @@ export default function ManagementEmployeePage() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* F. KONFIRMASI HAPUS OFF DAY */}
+      <AnimatePresence>
+        {deleteOffId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }} transition={{ duration: 0.2 }}
+              className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center"
+            >
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-slate-800 text-lg mb-2">Hapus Jadwal Off</h3>
+              <p className="text-sm text-slate-500 mb-6">Yakin ingin menghapus jadwal off ini?</p>
+              <div className="flex justify-center gap-3">
+                <Button variant="outline" onClick={() => setDeleteOffId(null)} disabled={deleteOffMutation.isPending} className="px-5 h-10">Batal</Button>
+                <Button onClick={() => deleteOffMutation.mutate(deleteOffId!)} disabled={deleteOffMutation.isPending} className="bg-red-600 hover:bg-red-700 text-white px-5 h-10">
+                  {deleteOffMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menghapus...</> : 'Ya, Hapus'}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* G. KONFIRMASI HAPUS EMERGENCY */}
+      <AnimatePresence>
+        {deleteEmergencyId && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }} transition={{ duration: 0.2 }}
+              className="bg-white rounded-xl shadow-xl w-full max-w-sm p-6 text-center"
+            >
+              <div className="mx-auto w-12 h-12 bg-red-100 rounded-full flex items-center justify-center text-red-600 mb-4">
+                <Trash2 className="w-6 h-6" />
+              </div>
+              <h3 className="font-bold text-slate-800 text-lg mb-2">Hapus Penugasan</h3>
+              <p className="text-sm text-slate-500 mb-6">Yakin ingin menghapus penugasan darurat ini?</p>
+              <div className="flex justify-center gap-3">
+                <Button variant="outline" onClick={() => setDeleteEmergencyId(null)} disabled={deleteEmergencyMutation.isPending} className="px-5 h-10">Batal</Button>
+                <Button onClick={() => deleteEmergencyMutation.mutate(deleteEmergencyId!)} disabled={deleteEmergencyMutation.isPending} className="bg-red-600 hover:bg-red-700 text-white px-5 h-10">
+                  {deleteEmergencyMutation.isPending ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Menghapus...</> : 'Ya, Hapus'}
+                </Button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </motion.div>
   )
 }
-
-// Icons placeholders for Chevron pagination
 function ChevronLeft(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}><path d="m15 18-6-6 6-6"/></svg>
