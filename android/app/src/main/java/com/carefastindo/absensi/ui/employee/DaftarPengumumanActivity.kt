@@ -3,6 +3,7 @@ package com.carefastindo.absensi.ui.employee
 import android.os.Bundle
 import android.view.View
 import android.widget.ImageButton
+import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
@@ -26,10 +27,11 @@ class DaftarPengumumanActivity : AppCompatActivity() {
     private lateinit var recyclerView: RecyclerView
     private lateinit var progressBar: ProgressBar
     private lateinit var txtNoData: TextView
+    private lateinit var layoutEmptyState: LinearLayout
 
     private lateinit var adapter: AnnouncementAdapter
     private var announcementsList = listOf<Announcement>()
-    private var readIds = setOf<String>()
+    private var readIds = mutableSetOf<String>()
 
     private var userId: String = ""
     private var userRole: String = ""
@@ -42,17 +44,15 @@ class DaftarPengumumanActivity : AppCompatActivity() {
         recyclerView = findViewById(R.id.recyclerViewAnnouncements)
         progressBar = findViewById(R.id.progressBar)
         txtNoData = findViewById(R.id.txtNoData)
+        layoutEmptyState = findViewById(R.id.layoutEmptyState)
 
         btnBack.setOnClickListener { finish() }
 
         recyclerView.layoutManager = LinearLayoutManager(this)
-        adapter = AnnouncementAdapter(emptyList(), emptySet()) { announcement ->
-            markAsRead(announcement.id)
-        }
+        adapter = AnnouncementAdapter(emptyList(), emptySet()) { /* no-op, all read on open */ }
         recyclerView.adapter = adapter
 
         userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: ""
-        
         loadUserDataAndAnnouncements()
     }
 
@@ -65,27 +65,21 @@ class DaftarPengumumanActivity : AppCompatActivity() {
 
         progressBar.visibility = View.VISIBLE
         recyclerView.visibility = View.GONE
-        txtNoData.visibility = View.GONE
+        layoutEmptyState.visibility = View.GONE
 
         lifecycleScope.launch {
             try {
-                // Get user's role from users table
                 val user = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("users")
-                        .select {
-                            filter {
-                                eq("id", userId)
-                            }
-                        }.decodeSingle<com.carefastindo.absensi.data.model.User>()
+                        .select { filter { eq("id", userId) } }
+                        .decodeSingle<com.carefastindo.absensi.data.model.User>()
                 }
                 userRole = user.role
-
                 loadAnnouncements()
-
             } catch (e: Exception) {
                 progressBar.visibility = View.GONE
-                txtNoData.visibility = View.VISIBLE
-                txtNoData.text = "Gagal memuat profil: ${e.localizedMessage}"
+                layoutEmptyState.visibility = View.VISIBLE
+                txtNoData.text = "Gagal memuat data"
             }
         }
     }
@@ -93,65 +87,77 @@ class DaftarPengumumanActivity : AppCompatActivity() {
     private fun loadAnnouncements() {
         lifecycleScope.launch {
             try {
-                // 1. Fetch announcements ordered by created_at DESC
+                // 1. Fetch announcements ordered newest first
                 val all = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("announcements")
-                        .select {
-                            order("created_at", Order.DESCENDING)
-                        }
+                        .select { order("created_at", Order.DESCENDING) }
                         .decodeList<Announcement>()
-                }.filter { it.isActive && (it.targetRole.equals("All", ignoreCase = true) || it.targetRole.equals(userRole, ignoreCase = true)) }
-
-                // 2. Fetch read logs for this user
-                val reads = withContext(Dispatchers.IO) {
-                    SupabaseClient.db.from("announcement_reads")
-                        .select {
-                            filter {
-                                eq("user_id", userId)
-                            }
-                        }
-                        .decodeList<AnnouncementRead>()
+                }.filter {
+                    it.isActive && (
+                        it.targetRole.equals("All", ignoreCase = true) ||
+                        it.targetRole.equals(userRole, ignoreCase = true)
+                    )
                 }
 
+                // 2. Fetch existing reads for this user
+                val reads = withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("announcement_reads")
+                        .select { filter { eq("user_id", userId) } }
+                        .decodeList<AnnouncementRead>()
+                }
+                readIds = reads.map { it.announcementId }.toMutableSet()
+
                 announcementsList = all
-                readIds = reads.map { it.announcementId }.toSet()
+
+                // 3. Mark all unread as read (opening = semuanya dibaca)
+                markAllAsRead(all)
 
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
                     if (announcementsList.isEmpty()) {
-                        txtNoData.visibility = View.VISIBLE
+                        layoutEmptyState.visibility = View.VISIBLE
                         recyclerView.visibility = View.GONE
                     } else {
-                        txtNoData.visibility = View.GONE
+                        layoutEmptyState.visibility = View.GONE
                         recyclerView.visibility = View.VISIBLE
                         adapter.updateData(announcementsList, readIds)
                     }
                 }
-
             } catch (e: Exception) {
                 withContext(Dispatchers.Main) {
                     progressBar.visibility = View.GONE
-                    txtNoData.visibility = View.VISIBLE
-                    txtNoData.text = "Gagal memuat pengumuman: ${e.localizedMessage}"
+                    layoutEmptyState.visibility = View.VISIBLE
+                    txtNoData.text = "Gagal memuat notifikasi"
                 }
             }
         }
     }
 
-    private fun markAsRead(announcementId: String) {
+    /**
+     * Saat halaman dibuka, semua notifikasi yang belum dibaca langsung di-mark read.
+     * Ini juga membuat titik kuning di lonceng hilang saat user kembali ke dashboard.
+     */
+    private fun markAllAsRead(announcements: List<Announcement>) {
         lifecycleScope.launch {
+            val unreadIds = announcements.map { it.id }.filter { it !in readIds }
+            if (unreadIds.isEmpty()) return@launch
+
             try {
                 withContext(Dispatchers.IO) {
-                    SupabaseClient.db.from("announcement_reads")
-                        .insert(AnnouncementRead(announcementId = announcementId, userId = userId))
+                    for (id in unreadIds) {
+                        try {
+                            SupabaseClient.db.from("announcement_reads")
+                                .insert(AnnouncementRead(announcementId = id, userId = userId))
+                        } catch (e: Exception) {
+                            // Ignore duplicate key errors (already read)
+                        }
+                    }
                 }
-                
-                // Update local read set and adapter without fully reloading
-                readIds = readIds + announcementId
+                // Update local set so adapter shows all as read
+                readIds.addAll(unreadIds)
                 withContext(Dispatchers.Main) {
                     adapter.updateData(announcementsList, readIds)
                 }
-
             } catch (e: Exception) {
                 e.printStackTrace()
             }

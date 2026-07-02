@@ -33,47 +33,15 @@
                     android:orientation="vertical"
                     android:padding="20dp">
 
-                    <!-- Clock Row -->
-                    <RelativeLayout
-                        android:layout_width="match_parent"
+                    <!-- Card Header -->
+                    <TextView
+                        android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:layout_marginBottom="12dp">
-
-                        <TextView
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:text="KARTU IDENTITAS"
-                            android:textColor="@color/primary"
-                            android:textStyle="bold"
-                            android:textSize="12sp"
-                            android:layout_centerVertical="true" />
-
-                        <LinearLayout
-                            android:id="@+id/layoutClock"
-                            android:layout_width="wrap_content"
-                            android:layout_height="wrap_content"
-                            android:orientation="vertical"
-                            android:gravity="end"
-                            android:layout_alignParentEnd="true">
-
-                            <TextView
-                                android:id="@+id/txtLiveTime"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="00:00:00"
-                                android:textColor="@color/text_primary_light"
-                                android:textSize="20sp"
-                                android:textStyle="bold" />
-
-                            <TextView
-                                android:id="@+id/txtLiveDate"
-                                android:layout_width="wrap_content"
-                                android:layout_height="wrap_content"
-                                android:text="Selasa, 19 Mei 2026"
-                                android:textColor="@color/text_secondary_light"
-                                android:textSize="11sp" />
-                        </LinearLayout>
-                    </RelativeLayout>
+                        android:text="KARTU IDENTITAS"
+                        android:textColor="@color/primary"
+                        android:textStyle="bold"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="12dp" />
 
                     <!-- Divider -->
                     <View

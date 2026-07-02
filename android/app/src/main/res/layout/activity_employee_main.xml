@@ -22,7 +22,7 @@
             android:background="@android:color/white"
             android:paddingHorizontal="16dp">
 
-            <!-- Left: Logo + App Name -->
+            <!-- Left: Logo gambar -->
             <LinearLayout
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -33,19 +33,10 @@
 
                 <ImageView
                     android:id="@+id/imgLogo"
-                    android:layout_width="32dp"
-                    android:layout_height="32dp"
-                    android:src="@drawable/ic_logo_carefastindo"
+                    android:layout_width="120dp"
+                    android:layout_height="40dp"
+                    android:src="@drawable/header_logo"
                     android:scaleType="fitCenter" />
-
-                <TextView
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
-                    android:text="CareFast"
-                    android:textColor="@color/text_primary_light"
-                    android:textSize="18sp"
-                    android:textStyle="bold"
-                    android:layout_marginStart="8dp" />
             </LinearLayout>
 
             <!-- Right: Bell + User Avatar -->
@@ -74,21 +65,16 @@
                         android:layout_centerInParent="true"
                         android:src="@drawable/ic_bell" />
 
-                    <!-- Badge count -->
-                    <TextView
-                        android:id="@+id/txtNotifBadge"
-                        android:layout_width="16dp"
-                        android:layout_height="16dp"
+                    <!-- Unread dot (yellow blinking) -->
+                    <View
+                        android:id="@+id/viewNotifDot"
+                        android:layout_width="10dp"
+                        android:layout_height="10dp"
                         android:layout_alignParentEnd="true"
                         android:layout_alignParentTop="true"
-                        android:layout_marginTop="2dp"
-                        android:layout_marginEnd="2dp"
-                        android:background="@drawable/bg_badge_notification"
-                        android:gravity="center"
-                        android:text="0"
-                        android:textColor="@color/white"
-                        android:textSize="9sp"
-                        android:textStyle="bold"
+                        android:layout_marginTop="4dp"
+                        android:layout_marginEnd="4dp"
+                        android:background="@drawable/bg_notif_dot_yellow"
                         android:visibility="gone" />
                 </RelativeLayout>
 

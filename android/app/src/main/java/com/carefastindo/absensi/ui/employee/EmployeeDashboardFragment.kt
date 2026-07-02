@@ -416,8 +416,6 @@ class EmployeeDashboardFragment : Fragment() {
                 val txtEmployeeRole = view.findViewById<android.widget.TextView>(R.id.txtEmployeeRole)
                 val txtEmployeeNip = view.findViewById<android.widget.TextView>(R.id.txtEmployeeNip)
                 val txtEmployeeShiftTime = view.findViewById<android.widget.TextView>(R.id.txtEmployeeShiftTime)
-                val txtLiveTime = view.findViewById<android.widget.TextView>(R.id.txtLiveTime)
-                val txtLiveDate = view.findViewById<android.widget.TextView>(R.id.txtLiveDate)
 
                 state.user?.let { u ->
                     txtEmployeeName?.text = u.name
@@ -433,9 +431,6 @@ class EmployeeDashboardFragment : Fragment() {
                         txtEmployeeShiftTime?.text = "($masuk - $pulang)"
                     }
                 }
-
-                txtLiveTime?.text = state.liveTime
-                txtLiveDate?.text = state.liveDate
             }
         }
     }

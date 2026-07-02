@@ -1,5 +1,7 @@
 package com.carefastindo.absensi.ui.employee
 
+import android.animation.AnimatorInflater
+import android.animation.ObjectAnimator
 import android.content.Intent
 import android.graphics.BitmapFactory
 import android.os.Bundle
@@ -29,6 +31,7 @@ class EmployeeMainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityEmployeeMainBinding
     private val viewModel: EmployeeViewModel by viewModels()
+    private var blinkAnimator: ObjectAnimator? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -38,7 +41,6 @@ class EmployeeMainActivity : AppCompatActivity() {
         setupNavigation()
         observeViewModel()
 
-        // Load default fragment
         if (savedInstanceState == null) {
             replaceFragment(EmployeeDashboardFragment())
         }
@@ -46,11 +48,17 @@ class EmployeeMainActivity : AppCompatActivity() {
 
     override fun onResume() {
         super.onResume()
+        // Setiap kali kembali ke dashboard (misal setelah tutup halaman notifikasi),
+        // re-cek apakah masih ada unread
         fetchUnreadAnnouncementsCount()
     }
 
+    override fun onDestroy() {
+        super.onDestroy()
+        blinkAnimator?.cancel()
+    }
+
     private fun setupNavigation() {
-        // Setup TabLayout
         val tabLayout = binding.tabLayoutNavigation
         tabLayout.addTab(tabLayout.newTab().setText("Dashboard"))
         tabLayout.addTab(tabLayout.newTab().setText("Izin"))
@@ -70,10 +78,9 @@ class EmployeeMainActivity : AppCompatActivity() {
             override fun onTabReselected(tab: TabLayout.Tab) {}
         })
 
-        // Notification Bell Click handler
+        // Bell → buka halaman Notifikasi
         binding.layoutNotificationBell.setOnClickListener {
-            val intent = Intent(this, DaftarPengumumanActivity::class.java)
-            startActivity(intent)
+            startActivity(Intent(this, DaftarPengumumanActivity::class.java))
         }
     }
 
@@ -130,20 +137,28 @@ class EmployeeMainActivity : AppCompatActivity() {
         }
     }
 
-    private fun fetchUnreadAnnouncementsCount() {
+    /**
+     * Cek notifikasi yang belum dibaca.
+     * Jika ada → tampilkan titik kuning berkedip di ikon lonceng.
+     * Jika tidak ada → sembunyikan titik.
+     */
+    fun fetchUnreadAnnouncementsCount() {
         val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return
         val userRole = viewModel.uiState.value.user?.role ?: ""
-        
+
         lifecycleScope.launch {
             try {
-                // 1. Fetch announcements
                 val allAnnouncements = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("announcements")
                         .select()
                         .decodeList<Announcement>()
-                }.filter { it.isActive && (it.targetRole.equals("All", ignoreCase = true) || it.targetRole.equals(userRole, ignoreCase = true)) }
+                }.filter {
+                    it.isActive && (
+                        it.targetRole.equals("All", ignoreCase = true) ||
+                        it.targetRole.equals(userRole, ignoreCase = true)
+                    )
+                }
 
-                // 2. Fetch reads
                 val readAnnouncements = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("announcement_reads")
                         .select { filter { eq("user_id", userId) } }
@@ -151,19 +166,31 @@ class EmployeeMainActivity : AppCompatActivity() {
                 }
 
                 val readIds = readAnnouncements.map { it.announcementId }.toSet()
-                val unreadCount = allAnnouncements.count { it.id !in readIds }
+                val hasUnread = allAnnouncements.any { it.id !in readIds }
 
                 withContext(Dispatchers.Main) {
-                    if (unreadCount > 0) {
-                        binding.txtNotifBadge.text = unreadCount.toString()
-                        binding.txtNotifBadge.visibility = View.VISIBLE
-                    } else {
-                        binding.txtNotifBadge.visibility = View.GONE
-                    }
+                    showNotifDot(hasUnread)
                 }
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+        }
+    }
+
+    private fun showNotifDot(show: Boolean) {
+        val dot = binding.viewNotifDot
+        if (show) {
+            dot.visibility = View.VISIBLE
+            // Mulai animasi blink jika belum berjalan
+            if (blinkAnimator == null || blinkAnimator?.isRunning == false) {
+                blinkAnimator = AnimatorInflater.loadAnimator(this, R.anim.blink) as ObjectAnimator
+                blinkAnimator?.target = dot
+                blinkAnimator?.start()
+            }
+        } else {
+            dot.visibility = View.GONE
+            blinkAnimator?.cancel()
+            blinkAnimator = null
         }
     }
 
@@ -177,14 +204,16 @@ class EmployeeMainActivity : AppCompatActivity() {
                         withContext(Dispatchers.IO) {
                             SupabaseClient.auth.signOut()
                         }
-                        
-                        // Navigate back to LoginActivity and clear backstack
                         val intent = Intent(this@EmployeeMainActivity, LoginActivity::class.java)
                         intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
                         startActivity(intent)
                         finish()
                     } catch (e: Exception) {
-                        Toast.makeText(this@EmployeeMainActivity, "Gagal logout: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+                        Toast.makeText(
+                            this@EmployeeMainActivity,
+                            "Gagal logout: ${e.localizedMessage}",
+                            Toast.LENGTH_LONG
+                        ).show()
                     }
                 }
             }
