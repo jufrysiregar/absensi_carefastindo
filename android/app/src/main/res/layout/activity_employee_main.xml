@@ -123,8 +123,7 @@
         app:tabIndicatorHeight="3dp"
         app:tabSelectedTextColor="@color/primary"
         app:tabTextColor="@color/text_secondary_light"
-        app:tabTextAppearance="@android:style/TextAppearance.Small"
-        app:tabElevation="2dp" />
+        app:tabTextAppearance="@android:style/TextAppearance.Small" />
 
     <!-- Fragment container -->
     <FrameLayout
