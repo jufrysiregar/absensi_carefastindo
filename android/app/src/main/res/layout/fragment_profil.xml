@@ -229,6 +229,31 @@
                         android:layout_marginBottom="12dp"
                         android:textStyle="bold" />
 
+                    <!-- Tentang Aplikasi Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnTentangAplikasi"
+                        style="@style/Widget.Material3.Button.ElevatedButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:text="Tentang Aplikasi"
+                        android:textColor="@color/primary"
+                        app:icon="@android:drawable/ic_dialog_info"
+                        app:cornerRadius="10dp"
+                        android:layout_marginBottom="12dp"
+                        android:textStyle="bold" />
+
+                    <!-- Logout Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnLogout"
+                        android:layout_width="match_parent"
+                        android:layout_height="50dp"
+                        android:text="Keluar"
+                        android:textColor="@color/white"
+                        android:backgroundTint="@color/error"
+                        app:icon="@android:drawable/ic_lock_power_off"
+                        app:cornerRadius="10dp"
+                        android:textStyle="bold" />
+
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 

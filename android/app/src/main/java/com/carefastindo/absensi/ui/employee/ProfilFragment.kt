@@ -43,6 +43,8 @@ class ProfilFragment : Fragment() {
 
     private lateinit var btnRegisterFace: MaterialButton
     private lateinit var btnChangePassword: MaterialButton
+    private lateinit var btnTentangAplikasi: MaterialButton
+    private lateinit var btnLogout: MaterialButton
 
     private lateinit var loadingOverlay: View
 
@@ -63,6 +65,8 @@ class ProfilFragment : Fragment() {
 
         btnRegisterFace = view.findViewById(R.id.btnRegisterFace)
         btnChangePassword = view.findViewById(R.id.btnChangePassword)
+        btnTentangAplikasi = view.findViewById(R.id.btnTentangAplikasi)
+        btnLogout = view.findViewById(R.id.btnLogout)
 
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
@@ -155,7 +159,13 @@ class ProfilFragment : Fragment() {
             showChangePasswordDialog()
         }
 
+        btnTentangAplikasi.setOnClickListener {
+            startActivity(Intent(requireContext(), com.carefastindo.absensi.ui.about.TentangAplikasiActivity::class.java))
+        }
 
+        btnLogout.setOnClickListener {
+            (activity as? EmployeeMainActivity)?.showLogoutConfirmationDialog()
+        }
     }
 
     private fun observeUserData() {
