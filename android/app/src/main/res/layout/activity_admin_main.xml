@@ -50,7 +50,7 @@
                     android:src="@drawable/header_logo"
                     android:scaleType="fitCenter" />
 
-                <!-- Teks di tengah sisa ruang (tidak akan menabrak logo) -->
+                <!-- Teks di sudut kiri setelah logo -->
                 <TextView
                     android:id="@+id/txtToolbarTitle"
                     android:layout_width="0dp"
@@ -60,8 +60,9 @@
                     android:textColor="@color/text_primary_light"
                     android:textSize="16sp"
                     android:textStyle="bold"
-                    android:gravity="center"
-                    android:maxLines="2" />
+                    android:gravity="start"
+                    android:maxLines="2"
+                    android:layout_marginStart="12dp" />
             </LinearLayout>
         </androidx.cardview.widget.CardView>
 

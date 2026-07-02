@@ -1,54 +1,63 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.drawerlayout.widget.DrawerLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://tools.android.com/tools"
+    android:id="@+id/drawerLayout"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:orientation="vertical"
-    android:background="@color/bg_light"
+    android:fitsSystemWindows="true"
     tools:context=".ui.employee.EmployeeMainActivity">
 
-    <!-- Custom luxury header -->
-    <androidx.cardview.widget.CardView
-        android:id="@+id/headerCard"
+    <!-- Main Content Area -->
+    <androidx.constraintlayout.widget.ConstraintLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        app:cardElevation="4dp"
-        app:cardCornerRadius="0dp">
+        android:layout_height="match_parent"
+        android:fitsSystemWindows="true"
+        android:background="@color/bg_light">
 
-        <RelativeLayout
+        <!-- Header / Toolbar -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/headerCard"
             android:layout_width="match_parent"
-            android:layout_height="64dp"
-            android:background="@android:color/white"
-            android:paddingHorizontal="16dp">
+            android:layout_height="wrap_content"
+            app:cardElevation="6dp"
+            app:cardCornerRadius="0dp"
+            app:layout_constraintTop_toTopOf="parent">
 
-            <!-- Left: Logo gambar -->
             <LinearLayout
-                android:layout_width="wrap_content"
+                android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_alignParentStart="true"
-                android:layout_centerVertical="true"
                 android:orientation="horizontal"
+                android:background="@android:color/white"
+                android:paddingHorizontal="12dp"
+                android:paddingVertical="12dp"
                 android:gravity="center_vertical">
 
+                <!-- Hamburger button -->
+                <ImageButton
+                    android:id="@+id/btnMenu"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:src="@drawable/ic_menu_custom"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Buka menu"
+                    android:tint="@color/text_primary_light" />
+
+                <!-- Logo -->
                 <ImageView
                     android:id="@+id/imgLogo"
-                    android:layout_width="120dp"
+                    android:layout_width="110dp"
                     android:layout_height="40dp"
                     android:src="@drawable/header_logo"
                     android:scaleType="fitCenter" />
-            </LinearLayout>
 
-            <!-- Right: Bell + User Avatar -->
-            <LinearLayout
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_alignParentEnd="true"
-                android:layout_centerVertical="true"
-                android:orientation="horizontal"
-                android:gravity="center_vertical">
+                <!-- Spacer -->
+                <View
+                    android:layout_width="0dp"
+                    android:layout_height="1dp"
+                    android:layout_weight="1" />
 
-                <!-- Notification Bell with Badge -->
+                <!-- Notification Bell -->
                 <RelativeLayout
                     android:id="@+id/layoutNotificationBell"
                     android:layout_width="40dp"
@@ -56,7 +65,7 @@
                     android:background="?attr/selectableItemBackgroundBorderless"
                     android:clickable="true"
                     android:focusable="true"
-                    android:layout_marginEnd="12dp">
+                    android:layout_marginEnd="8dp">
 
                     <ImageView
                         android:id="@+id/btnNotification"
@@ -93,29 +102,32 @@
                         android:src="@android:drawable/sym_def_app_icon"
                         android:scaleType="centerCrop" />
                 </androidx.cardview.widget.CardView>
+
             </LinearLayout>
-        </RelativeLayout>
-    </androidx.cardview.widget.CardView>
+        </androidx.cardview.widget.CardView>
 
-    <!-- Horizontal Navigation Tabs -->
-    <com.google.android.material.tabs.TabLayout
-        android:id="@+id/tabLayoutNavigation"
-        android:layout_width="match_parent"
-        android:layout_height="48dp"
+        <!-- Fragment Container -->
+        <FrameLayout
+            android:id="@+id/employeeFragmentContainer"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            app:layout_constraintTop_toBottomOf="@id/headerCard"
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
+
+    <!-- Side Navigation Drawer -->
+    <com.google.android.material.navigation.NavigationView
+        android:id="@+id/navView"
+        android:layout_width="wrap_content"
+        android:layout_height="match_parent"
+        android:layout_gravity="start"
+        android:fitsSystemWindows="true"
+        app:headerLayout="@layout/nav_header_employee"
+        app:menu="@menu/drawer_menu_employee"
+        app:itemIconTint="#1A1A1A"
+        app:itemTextColor="@color/text_primary_light"
         android:background="@android:color/white"
-        app:tabMode="fixed"
-        app:tabGravity="fill"
-        app:tabIndicatorColor="@color/primary"
-        app:tabIndicatorHeight="3dp"
-        app:tabSelectedTextColor="@color/primary"
-        app:tabTextColor="@color/text_secondary_light"
-        app:tabTextAppearance="@android:style/TextAppearance.Small" />
+        app:itemBackground="@android:color/transparent" />
 
-    <!-- Fragment container -->
-    <FrameLayout
-        android:id="@+id/employeeFragmentContainer"
-        android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_weight="1" />
-
-</LinearLayout>
+</androidx.drawerlayout.widget.DrawerLayout>

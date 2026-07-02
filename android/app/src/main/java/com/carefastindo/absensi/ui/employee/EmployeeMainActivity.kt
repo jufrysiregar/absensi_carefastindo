@@ -7,9 +7,12 @@ import android.graphics.BitmapFactory
 import android.os.Bundle
 import android.util.Base64
 import android.view.View
+import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.viewModels
+import androidx.appcompat.app.ActionBarDrawerToggle
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.GravityCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.carefastindo.absensi.R
@@ -17,9 +20,10 @@ import com.carefastindo.absensi.data.model.Announcement
 import com.carefastindo.absensi.data.model.AnnouncementRead
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.databinding.ActivityEmployeeMainBinding
+import com.carefastindo.absensi.ui.about.TentangAplikasiActivity
 import com.carefastindo.absensi.ui.login.LoginActivity
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
-import com.google.android.material.tabs.TabLayout
+import com.google.android.material.navigation.NavigationView
 import io.github.jan.supabase.auth.auth
 import io.github.jan.supabase.postgrest.from
 import kotlinx.coroutines.Dispatchers
@@ -38,18 +42,17 @@ class EmployeeMainActivity : AppCompatActivity() {
         binding = ActivityEmployeeMainBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        setupNavigation()
+        setupDrawer()
         observeViewModel()
 
         if (savedInstanceState == null) {
-            replaceFragment(EmployeeDashboardFragment())
+            replaceFragment(EmployeeDashboardFragment(), "Dashboard")
+            binding.navView.setCheckedItem(R.id.nav_emp_dashboard)
         }
     }
 
     override fun onResume() {
         super.onResume()
-        // Setiap kali kembali ke dashboard (misal setelah tutup halaman notifikasi),
-        // re-cek apakah masih ada unread
         fetchUnreadAnnouncementsCount()
     }
 
@@ -58,33 +61,41 @@ class EmployeeMainActivity : AppCompatActivity() {
         blinkAnimator?.cancel()
     }
 
-    private fun setupNavigation() {
-        val tabLayout = binding.tabLayoutNavigation
-        tabLayout.addTab(tabLayout.newTab().setText("Dashboard"))
-        tabLayout.addTab(tabLayout.newTab().setText("Izin"))
-        tabLayout.addTab(tabLayout.newTab().setText("Riwayat"))
-        tabLayout.addTab(tabLayout.newTab().setText("Profil"))
+    override fun onBackPressed() {
+        if (binding.drawerLayout.isDrawerOpen(GravityCompat.START)) {
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+        } else {
+            super.onBackPressed()
+        }
+    }
 
-        tabLayout.addOnTabSelectedListener(object : TabLayout.OnTabSelectedListener {
-            override fun onTabSelected(tab: TabLayout.Tab) {
-                when (tab.position) {
-                    0 -> replaceFragment(EmployeeDashboardFragment())
-                    1 -> replaceFragment(PengajuanIzinFragment())
-                    2 -> replaceFragment(RiwayatAbsensiFragment())
-                    3 -> replaceFragment(ProfilFragment())
-                }
-            }
-            override fun onTabUnselected(tab: TabLayout.Tab) {}
-            override fun onTabReselected(tab: TabLayout.Tab) {}
-        })
+    private fun setupDrawer() {
+        // Hamburger button buka drawer
+        binding.btnMenu.setOnClickListener {
+            binding.drawerLayout.openDrawer(GravityCompat.START)
+        }
 
         // Bell → buka halaman Notifikasi
         binding.layoutNotificationBell.setOnClickListener {
             startActivity(Intent(this, DaftarPengumumanActivity::class.java))
         }
+
+        // Navigation item listener
+        binding.navView.setNavigationItemSelectedListener { menuItem ->
+            when (menuItem.itemId) {
+                R.id.nav_emp_dashboard -> replaceFragment(EmployeeDashboardFragment(), "Dashboard")
+                R.id.nav_emp_izin      -> replaceFragment(PengajuanIzinFragment(), "Pengajuan Cuti")
+                R.id.nav_emp_riwayat   -> replaceFragment(RiwayatAbsensiFragment(), "Riwayat Absensi")
+                R.id.nav_emp_profil    -> replaceFragment(ProfilFragment(), "Profil")
+                R.id.nav_emp_tentang   -> startActivity(Intent(this, TentangAplikasiActivity::class.java))
+                R.id.nav_emp_logout    -> showLogoutConfirmationDialog()
+            }
+            binding.drawerLayout.closeDrawer(GravityCompat.START)
+            true
+        }
     }
 
-    private fun replaceFragment(fragment: Fragment) {
+    private fun replaceFragment(fragment: Fragment, title: String = "") {
         supportFragmentManager.beginTransaction()
             .replace(R.id.employeeFragmentContainer, fragment)
             .commit()
@@ -94,6 +105,12 @@ class EmployeeMainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
                 state.user?.let { user ->
+                    // Update nav header nama & role
+                    val headerView = binding.navView.getHeaderView(0)
+                    headerView?.findViewById<TextView>(R.id.navHeaderEmpName)?.text = user.name
+                    headerView?.findViewById<TextView>(R.id.navHeaderEmpRole)?.text =
+                        "${user.position ?: user.role} – ${user.shiftType ?: "-"}"
+
                     loadHeaderAvatar(user.id)
                     fetchUnreadAnnouncementsCount()
                 }
@@ -137,11 +154,6 @@ class EmployeeMainActivity : AppCompatActivity() {
         }
     }
 
-    /**
-     * Cek notifikasi yang belum dibaca.
-     * Jika ada → tampilkan titik kuning berkedip di ikon lonceng.
-     * Jika tidak ada → sembunyikan titik.
-     */
     fun fetchUnreadAnnouncementsCount() {
         val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id ?: return
         val userRole = viewModel.uiState.value.user?.role ?: ""
@@ -181,7 +193,6 @@ class EmployeeMainActivity : AppCompatActivity() {
         val dot = binding.viewNotifDot
         if (show) {
             dot.visibility = View.VISIBLE
-            // Mulai animasi blink jika belum berjalan
             if (blinkAnimator == null || blinkAnimator?.isRunning == false) {
                 blinkAnimator = AnimatorInflater.loadAnimator(this, R.anim.blink) as ObjectAnimator
                 blinkAnimator?.target = dot

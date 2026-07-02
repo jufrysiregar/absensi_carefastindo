@@ -8,28 +8,26 @@
     android:padding="16dp">
 
     <ImageView
-        android:id="@+id/navHeaderIcon"
         android:layout_width="220dp"
         android:layout_height="80dp"
         android:scaleType="fitStart"
         android:src="@drawable/logo" />
 
     <TextView
-        android:id="@+id/navHeaderName"
+        android:id="@+id/navHeaderEmpName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:text="Nama Pegawai"
-        android:textAppearance="@style/TextAppearance.AppCompat.Body2"
+        android:text="Karyawan Carefast"
         android:textColor="@color/text_primary_light"
         android:textSize="16sp"
         android:textStyle="bold" />
 
     <TextView
-        android:id="@+id/navHeaderEmail"
+        android:id="@+id/navHeaderEmpRole"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="pegawai@carefastindo.com"
+        android:text="Pegawai"
         android:textColor="@color/text_secondary_light"
         android:textSize="13sp" />
 
