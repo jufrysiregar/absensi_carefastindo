@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, CheckCircle, ClipboardList, HeartPulse, TrendingUp, Clock, QrCode, Download, Check, X, Loader2 } from 'lucide-react'
+import { Users, CheckCircle, ClipboardList, HeartPulse, TrendingUp, Clock, QrCode, Download, Check, X, Loader2, AlertTriangle } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { formatDate, formatTime } from '@/lib/utils'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { toast } from 'sonner'
 import QRCode from 'qrcode'
 
-interface Stats { total: number; hadir: number; izin: number; sakit: number }
+interface Stats { total: number; hadir: number; izin: number; sakit: number; lembur: number; gantiOff: number }
 interface RecentAttendance {
   id: string; user_name: string; shift_name: string
   date: string; check_in: string | null; status: string
@@ -92,7 +92,16 @@ export default function DashboardPage() {
       const izin = records.filter(r => r.status === 'izin').length
       const sakit = records.filter(r => r.status === 'sakit').length
 
-      return { total, hadir, izin, sakit }
+      // Fetch emergency counts for today
+      const { data: emergencyData } = await supabase
+        .from('emergency_assignments')
+        .select('reason')
+        .eq('target_date', today)
+
+      const lembur = (emergencyData ?? []).filter(r => r.reason === 'lembur').length
+      const gantiOff = (emergencyData ?? []).filter(r => r.reason === 'ganti_off').length
+
+      return { total, hadir, izin, sakit, lembur, gantiOff }
     },
   })
 
@@ -312,7 +321,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stats Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-slate-500">Total Karyawan</CardTitle>
@@ -374,6 +383,34 @@ export default function DashboardPage() {
                 <div className="text-3xl font-bold text-slate-800">{stats?.sakit || 0}</div>
                 <p className="text-xs text-slate-400 mt-1">{pct(stats?.sakit || 0)} dari total</p>
               </>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Lembur Hari Ini</CardTitle>
+            <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
+              <Clock className="w-4 h-4 text-blue-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-3xl font-bold text-slate-800">{stats?.lembur || 0}</div>
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="hover:shadow-md transition-shadow">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-slate-500">Ganti Off Hari Ini</CardTitle>
+            <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center">
+              <AlertTriangle className="w-4 h-4 text-amber-500" />
+            </div>
+          </CardHeader>
+          <CardContent>
+            {statsLoading ? <Skeleton className="h-8 w-16" /> : (
+              <div className="text-3xl font-bold text-slate-800">{stats?.gantiOff || 0}</div>
             )}
           </CardContent>
         </Card>

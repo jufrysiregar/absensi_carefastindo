@@ -86,6 +86,7 @@ class EmployeeMainActivity : AppCompatActivity() {
                 R.id.nav_emp_dashboard -> replaceFragment(EmployeeDashboardFragment(), "Dashboard")
                 R.id.nav_emp_izin      -> replaceFragment(PengajuanIzinFragment(), "Pengajuan Cuti")
                 R.id.nav_emp_riwayat   -> replaceFragment(RiwayatAbsensiFragment(), "Riwayat Absensi")
+                R.id.nav_emp_darurat   -> startActivity(Intent(this, DaruratLemburActivity::class.java))
                 R.id.nav_emp_profil    -> replaceFragment(ProfilFragment(), "Profil")
                 R.id.nav_emp_tentang   -> startActivity(Intent(this, TentangAplikasiActivity::class.java))
                 R.id.nav_emp_logout    -> showLogoutConfirmationDialog()
@@ -111,6 +112,13 @@ class EmployeeMainActivity : AppCompatActivity() {
                     headerView?.findViewById<TextView>(R.id.navHeaderEmpName)?.text = user.name
                     headerView?.findViewById<TextView>(R.id.navHeaderEmpRole)?.text =
                         "${user.position ?: user.role} – ${user.shiftType ?: "-"}"
+
+                    // Tampilkan menu Darurat & Lembur hanya untuk superadmin, leader, supervisor
+                    val canSeeDarurat = user.role.equals("superadmin", ignoreCase = true) ||
+                        user.role.equals("leader", ignoreCase = true) ||
+                        user.role.equals("supervisor", ignoreCase = true)
+                    val daruratMenu = binding.navView.menu.findItem(R.id.nav_emp_darurat)
+                    daruratMenu?.isVisible = canSeeDarurat
 
                     loadHeaderAvatar(user.id)
                     fetchUnreadAnnouncementsCount()

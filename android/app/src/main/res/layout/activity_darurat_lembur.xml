@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical"
+    android:background="@color/bg_light">
+
+    <!-- Header -->
+    <androidx.cardview.widget.CardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:cardElevation="4dp"
+        app:cardCornerRadius="0dp">
+
+        <RelativeLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:background="@android:color/white"
+            android:paddingHorizontal="8dp">
+
+            <ImageButton
+                android:id="@+id/btnBack"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:src="@android:drawable/ic_menu_revert"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:tint="@color/text_primary_light"
+                android:layout_centerVertical="true"
+                android:rotation="180"
+                android:contentDescription="Back" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Darurat &amp; Lembur"
+                android:textColor="@color/text_primary_light"
+                android:textSize="18sp"
+                android:textStyle="bold"
+                android:layout_toEndOf="@id/btnBack"
+                android:layout_marginStart="8dp"
+                android:layout_centerVertical="true" />
+        </RelativeLayout>
+    </androidx.cardview.widget.CardView>
+
+    <!-- Content -->
+    <androidx.core.widget.NestedScrollView
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:padding="16dp">
+
+            <!-- Form Assign Card -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@color/white"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TAMBAH PENUGASAN"
+                        android:textColor="@color/primary"
+                        android:textStyle="bold"
+                        android:textSize="13sp"
+                        android:layout_marginBottom="16dp" />
+
+                    <!-- Karyawan Ditugaskan -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Karyawan Ditugaskan *"
+                        android:textColor="@color/text_secondary_light"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <Spinner
+                        android:id="@+id/spinEmployee"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:background="@drawable/bg_bottom_sheet"
+                        android:layout_marginBottom="12dp" />
+
+                    <!-- Tanggal -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tanggal *"
+                        android:textColor="@color/text_secondary_light"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="4dp" />
+
+                    <Button
+                        android:id="@+id/btnPickDate"
+                        android:layout_width="match_parent"
+                        android:layout_height="48dp"
+                        android:text="Pilih Tanggal"
+                        android:textColor="@color/text_primary_light"
+                        android:backgroundTint="#F1F5F9"
+                        android:layout_marginBottom="12dp" />
+
+                    <!-- Tipe Perubahan -->
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="Tipe Penugasan *"
+                        android:textColor="@color/text_secondary_light"
+                        android:textSize="12sp"
+                        android:layout_marginBottom="8dp" />
+
+                    <RadioGroup
+                        android:id="@+id/radioGroupReason"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="horizontal"
+                        android:layout_marginBottom="12dp">
+
+                        <RadioButton
+                            android:id="@+id/radioLembur"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Lembur"
+                            android:checked="true"
+                            android:layout_marginEnd="24dp" />
+
+                        <RadioButton
+                            android:id="@+id/radioGantiOff"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Ganti Off" />
+                    </RadioGroup>
+
+                    <!-- Shift (muncul jika Lembur) -->
+                    <LinearLayout
+                        android:id="@+id/layoutShift"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:layout_marginBottom="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Shift Lembur"
+                            android:textColor="@color/text_secondary_light"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="4dp" />
+
+                        <Spinner
+                            android:id="@+id/spinShift"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_bottom_sheet" />
+                    </LinearLayout>
+
+                    <!-- Karyawan Digantikan (muncul jika Ganti Off) -->
+                    <LinearLayout
+                        android:id="@+id/layoutReplacing"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone"
+                        android:layout_marginBottom="12dp">
+
+                        <TextView
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Karyawan Digantikan *"
+                            android:textColor="@color/text_secondary_light"
+                            android:textSize="12sp"
+                            android:layout_marginBottom="4dp" />
+
+                        <Spinner
+                            android:id="@+id/spinReplacing"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:background="@drawable/bg_bottom_sheet" />
+                    </LinearLayout>
+
+                    <!-- Submit Button -->
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnSubmit"
+                        android:layout_width="match_parent"
+                        android:layout_height="52dp"
+                        android:text="SIMPAN PENUGASAN"
+                        android:textColor="@color/white"
+                        android:backgroundTint="@color/primary"
+                        app:cornerRadius="12dp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+
+            <!-- Daftar Penugasan -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                app:cardCornerRadius="16dp"
+                app:cardElevation="4dp"
+                app:cardBackgroundColor="@color/white"
+                android:layout_marginBottom="16dp">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="16dp">
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="DAFTAR PENUGASAN"
+                        android:textColor="@color/primary"
+                        android:textStyle="bold"
+                        android:textSize="13sp"
+                        android:layout_marginBottom="12dp" />
+
+                    <androidx.recyclerview.widget.RecyclerView
+                        android:id="@+id/recyclerEmergency"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:nestedScrollingEnabled="false" />
+
+                    <TextView
+                        android:id="@+id/txtNoData"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="Belum ada penugasan"
+                        android:textColor="@color/text_secondary_light"
+                        android:gravity="center"
+                        android:padding="16dp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </androidx.cardview.widget.CardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- Loading Overlay -->
+    <FrameLayout
+        android:id="@+id/loadingOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#99000000"
+        android:visibility="gone"
+        android:clickable="true"
+        android:focusable="true">
+
+        <ProgressBar
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:indeterminateTint="@color/white" />
+    </FrameLayout>
+
+</LinearLayout>

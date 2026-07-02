@@ -15,6 +15,10 @@
             android:icon="@android:drawable/ic_menu_recent_history"
             android:title="Riwayat Absensi" />
         <item
+            android:id="@+id/nav_emp_darurat"
+            android:icon="@android:drawable/ic_menu_edit"
+            android:title="Darurat &amp; Lembur" />
+        <item
             android:id="@+id/nav_emp_profil"
             android:icon="@android:drawable/ic_menu_info_details"
             android:title="Profil" />

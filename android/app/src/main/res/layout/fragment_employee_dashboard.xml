@@ -515,54 +515,29 @@
                         app:cornerRadius="12dp"
                         android:textStyle="bold" />
 
-                    <!-- Overtime Info Card (Initially GONE) -->
+                    <!-- Info Lembur Card (Initially GONE) -->
                     <androidx.cardview.widget.CardView
-                        android:id="@+id/cardOvertimeInfo"
+                        android:id="@+id/cardEmergencyInfo"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:layout_marginTop="16dp"
                         app:cardCornerRadius="8dp"
                         app:cardElevation="2dp"
-                        app:cardBackgroundColor="#FFF8E1"
+                        app:cardBackgroundColor="#EFF6FF"
                         android:visibility="gone">
                         <TextView
-                            android:id="@+id/txtOvertimeInfoContent"
+                            android:id="@+id/txtEmergencyInfoContent"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
                             android:padding="12dp"
                             android:text="⚡ Anda ditugaskan lembur hari ini."
-                            android:textColor="#F57F17"
+                            android:textColor="#1D4ED8"
                             android:textSize="13sp" />
                     </androidx.cardview.widget.CardView>
-
-                    <!-- Overtime Action Button (Initially GONE) -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnOvertime"
-                        android:layout_width="match_parent"
-                        android:layout_height="56dp"
-                        android:layout_marginTop="12dp"
-                        android:text="MULAI LEMBUR"
-                        android:textColor="@color/white"
-                        android:backgroundTint="@color/warning"
-                        app:cornerRadius="12dp"
-                        android:textStyle="bold"
-                        android:visibility="gone" />
 
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Assign Lembur Button for Leader (Initially GONE) -->
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/btnAssignLemburAdmin"
-                android:layout_width="match_parent"
-                android:layout_height="56dp"
-                android:text="⚡ Assign Lembur"
-                android:textColor="@color/white"
-                android:backgroundTint="@color/accent"
-                app:cornerRadius="12dp"
-                android:textStyle="bold"
-                android:layout_marginBottom="16dp"
-                android:visibility="gone" />
 
         </LinearLayout>
     </androidx.core.widget.NestedScrollView>
