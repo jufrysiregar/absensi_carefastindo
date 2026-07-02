@@ -201,7 +201,10 @@ export default function ManagementEmployeePage() {
   const [deleteEmergencyId, setDeleteEmergencyId] = useState<string | null>(null)
   // For filtering users who are off on a specific date (ganti_off)
   const [offUsersOnDate, setOffUsersOnDate] = useState<{ id: string; name: string }[]>([])
-  const [loadingOffUsers, setLoadingOffUsers] = useState(false)  const [attPage, setAttPage] = useState(1)
+  const [loadingOffUsers, setLoadingOffUsers] = useState(false)
+
+  // Attendance table filters & pagination
+  const [attPage, setAttPage] = useState(1)
   const [attSearch, setAttSearch] = useState('')
   const [attFilterDate, setAttFilterDate] = useState(todayStr)
   const [attFilterShift, setAttFilterShift] = useState('all')
