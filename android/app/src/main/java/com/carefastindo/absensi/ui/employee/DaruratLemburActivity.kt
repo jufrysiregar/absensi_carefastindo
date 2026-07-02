@@ -34,6 +34,7 @@ class DaruratLemburActivity : AppCompatActivity() {
     private lateinit var spinShift: Spinner
     private lateinit var spinReplacing: Spinner
     private lateinit var btnPickDate: Button
+    private lateinit var btnPickReplacingDate: Button
     private lateinit var radioGroupReason: RadioGroup
     private lateinit var radioLembur: RadioButton
     private lateinit var radioGantiOff: RadioButton
@@ -47,6 +48,7 @@ class DaruratLemburActivity : AppCompatActivity() {
     private var usersList = listOf<User>()
     private var shiftsList = listOf<Shift>()
     private var selectedDate: String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+    private var selectedReplacingDate: String? = null
     private var currentUserRole: String = ""
 
     data class EmergencyWithNames(
@@ -65,6 +67,7 @@ class DaruratLemburActivity : AppCompatActivity() {
         spinShift = findViewById(R.id.spinShift)
         spinReplacing = findViewById(R.id.spinReplacing)
         btnPickDate = findViewById(R.id.btnPickDate)
+        btnPickReplacingDate = findViewById(R.id.btnPickReplacingDate)
         radioGroupReason = findViewById(R.id.radioGroupReason)
         radioLembur = findViewById(R.id.radioLembur)
         radioGantiOff = findViewById(R.id.radioGantiOff)
@@ -82,6 +85,8 @@ class DaruratLemburActivity : AppCompatActivity() {
         // Update displayed date
         btnPickDate.text = "Tanggal: $selectedDate"
         btnPickDate.setOnClickListener { showDatePicker() }
+
+        btnPickReplacingDate.setOnClickListener { showReplacingDatePicker() }
 
         // Radio group listener — show/hide conditional fields
         radioGroupReason.setOnCheckedChangeListener { _, checkedId ->
@@ -205,6 +210,16 @@ class DaruratLemburActivity : AppCompatActivity() {
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
     }
 
+    private fun showReplacingDatePicker() {
+        val cal = Calendar.getInstance()
+        DatePickerDialog(this, { _, yr, mn, dy ->
+            val c = Calendar.getInstance()
+            c.set(yr, mn, dy)
+            selectedReplacingDate = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(c.time)
+            btnPickReplacingDate.text = "Off digantikan: $selectedReplacingDate"
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    }
+
     private fun submitAssignment() {
         val empIdx = spinEmployee.selectedItemPosition
         if (empIdx < 0 || empIdx >= usersList.size) {
@@ -217,6 +232,7 @@ class DaruratLemburActivity : AppCompatActivity() {
 
         var shiftId: String? = null
         var replacingUserId: String? = null
+        var replacingDate: String? = null
 
         if (reason == "lembur") {
             val shiftIdx = spinShift.selectedItemPosition
@@ -224,6 +240,7 @@ class DaruratLemburActivity : AppCompatActivity() {
                 shiftId = shiftsList[shiftIdx].id
             }
         } else {
+            // Ganti Off
             val replIdx = spinReplacing.selectedItemPosition
             if (replIdx < 0 || replIdx >= usersList.size) {
                 Toast.makeText(this, "Pilih karyawan yang digantikan", Toast.LENGTH_SHORT).show(); return
@@ -232,6 +249,10 @@ class DaruratLemburActivity : AppCompatActivity() {
             if (replacingUserId == assignedUser.id) {
                 Toast.makeText(this, "Karyawan yang ditugaskan dan digantikan tidak boleh sama", Toast.LENGTH_SHORT).show(); return
             }
+            if (selectedReplacingDate == null) {
+                Toast.makeText(this, "Pilih tanggal off yang akan digantikan", Toast.LENGTH_SHORT).show(); return
+            }
+            replacingDate = selectedReplacingDate
         }
 
         loadingOverlay.visibility = View.VISIBLE
@@ -244,6 +265,7 @@ class DaruratLemburActivity : AppCompatActivity() {
                     targetDate = selectedDate,
                     reason = reason,
                     replacingUserId = replacingUserId,
+                    replacingDate = replacingDate,
                     shiftId = shiftId,
                     assignedBy = currentAdminId,
                     assignedFrom = "android",
@@ -254,7 +276,28 @@ class DaruratLemburActivity : AppCompatActivity() {
                     SupabaseClient.db.from("emergency_assignments").insert(assignment)
                 }
 
+                // Untuk ganti_off: tambahkan juga off_schedule baru untuk karyawan yang digantikan
+                // agar karyawan yang digantikan (replacing_user) mendapat hari off baru di replacing_date
+                if (reason == "ganti_off" && replacingUserId != null && replacingDate != null) {
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val offEntry = mapOf(
+                                "user_id" to replacingUserId,
+                                "off_date" to replacingDate,
+                                "reason" to "Ganti off dengan ${assignedUser.name}"
+                            )
+                            SupabaseClient.db.from("off_schedules").insert(offEntry)
+                        }
+                    } catch (e: Exception) {
+                        // Off schedule creation failed, log but don't fail the whole operation
+                        e.printStackTrace()
+                    }
+                }
+
                 Toast.makeText(this@DaruratLemburActivity, "Penugasan berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                // Reset form
+                selectedReplacingDate = null
+                btnPickReplacingDate.text = "Pilih Tanggal Off yang Digantikan"
                 loadAssignments()
             } catch (e: Exception) {
                 Toast.makeText(this@DaruratLemburActivity, "Gagal: ${e.localizedMessage}", Toast.LENGTH_LONG).show()

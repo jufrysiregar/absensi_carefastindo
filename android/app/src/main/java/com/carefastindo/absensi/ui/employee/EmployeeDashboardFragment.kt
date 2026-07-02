@@ -153,6 +153,16 @@ class EmployeeDashboardFragment : Fragment() {
         btnEndBreakEarly?.setOnClickListener {
             endBreakEarly()
         }
+
+        val btnOvertimeIn = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOvertimeIn)
+        btnOvertimeIn?.setOnClickListener {
+            handleOvertimeIn()
+        }
+
+        val btnOvertimeOut = view?.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOvertimeOut)
+        btnOvertimeOut?.setOnClickListener {
+            handleOvertimeOut()
+        }
     }
 
     private fun refreshDashboardData(onComplete: (() -> Unit)? = null) {
@@ -357,18 +367,56 @@ class EmployeeDashboardFragment : Fragment() {
         // 5. Emergency / Lembur info card
         val cardEmergencyInfo = view.findViewById<androidx.cardview.widget.CardView>(R.id.cardEmergencyInfo)
         val txtEmergencyInfoContent = view.findViewById<android.widget.TextView>(R.id.txtEmergencyInfoContent)
+        val btnOvertimeIn = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOvertimeIn)
+        val btnOvertimeOut = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnOvertimeOut)
 
         val emergency = todayEmergencyAssignment
         if (emergency != null) {
             cardEmergencyInfo?.visibility = View.VISIBLE
-            val msg = when (emergency.reason) {
-                "lembur" -> "⚡ Anda ditugaskan lembur hari ini."
-                "ganti_off" -> "🔄 Anda menggantikan karyawan lain hari ini (Ganti Off)."
-                else -> "ℹ️ Ada penugasan khusus hari ini."
+
+            when (emergency.reason) {
+                "lembur" -> {
+                    when (emergency.status) {
+                        "pending" -> {
+                            txtEmergencyInfoContent?.text = "⚡ Anda ditugaskan lembur hari ini. Tekan tombol di bawah untuk mulai."
+                            btnOvertimeIn?.visibility = View.VISIBLE
+                            btnOvertimeOut?.visibility = View.GONE
+                        }
+                        "active" -> {
+                            val startTime = emergency.overtimeIn?.substring(11, 16) ?: "--"
+                            txtEmergencyInfoContent?.text = "⚡ Sedang lembur sejak $startTime. Tekan selesai jika sudah."
+                            btnOvertimeIn?.visibility = View.GONE
+                            btnOvertimeOut?.visibility = View.VISIBLE
+                        }
+                        "selesai" -> {
+                            val startTime = emergency.overtimeIn?.substring(11, 16) ?: "--"
+                            val endTime = emergency.overtimeOut?.substring(11, 16) ?: "--"
+                            txtEmergencyInfoContent?.text = "✅ Lembur selesai. ($startTime - $endTime)"
+                            btnOvertimeIn?.visibility = View.GONE
+                            btnOvertimeOut?.visibility = View.GONE
+                        }
+                        else -> {
+                            txtEmergencyInfoContent?.text = "⚡ Anda ditugaskan lembur hari ini."
+                            btnOvertimeIn?.visibility = View.GONE
+                            btnOvertimeOut?.visibility = View.GONE
+                        }
+                    }
+                }
+                "ganti_off" -> {
+                    txtEmergencyInfoContent?.text = "🔄 Anda menggantikan karyawan lain hari ini (Ganti Off). Absen seperti biasa."
+                    btnOvertimeIn?.visibility = View.GONE
+                    btnOvertimeOut?.visibility = View.GONE
+                }
+                else -> {
+                    txtEmergencyInfoContent?.text = "ℹ️ Ada penugasan khusus hari ini."
+                    btnOvertimeIn?.visibility = View.GONE
+                    btnOvertimeOut?.visibility = View.GONE
+                }
             }
-            txtEmergencyInfoContent?.text = msg
         } else {
             cardEmergencyInfo?.visibility = View.GONE
+            btnOvertimeIn?.visibility = View.GONE
+            btnOvertimeOut?.visibility = View.GONE
         }
     }
 
@@ -674,6 +722,50 @@ class EmployeeDashboardFragment : Fragment() {
             } catch (e: Exception) {
                 e.printStackTrace()
                 Toast.makeText(requireContext(), "Gagal menyelesaikan istirahat: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun handleOvertimeIn() {
+        val emergencyId = todayEmergencyAssignment?.id ?: return
+        val nowStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("emergency_assignments").update({
+                        set("status", "active")
+                        set("overtime_in", nowStr)
+                    }) {
+                        filter { eq("id", emergencyId) }
+                    }
+                }
+                Toast.makeText(requireContext(), "Lembur dimulai! Semangat 💪", Toast.LENGTH_SHORT).show()
+                refreshDashboardData()
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Gagal: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun handleOvertimeOut() {
+        val emergencyId = todayEmergencyAssignment?.id ?: return
+        val nowStr = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.getDefault()).format(Date())
+
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("emergency_assignments").update({
+                        set("status", "selesai")
+                        set("overtime_out", nowStr)
+                    }) {
+                        filter { eq("id", emergencyId) }
+                    }
+                }
+                Toast.makeText(requireContext(), "Lembur selesai! Terima kasih 🙏", Toast.LENGTH_LONG).show()
+                refreshDashboardData()
+            } catch (e: Exception) {
+                Toast.makeText(requireContext(), "Gagal: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
             }
         }
     }
