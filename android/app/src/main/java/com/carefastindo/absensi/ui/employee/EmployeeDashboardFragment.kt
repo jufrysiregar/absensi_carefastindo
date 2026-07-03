@@ -22,6 +22,7 @@ import com.carefastindo.absensi.data.model.CompanyConfig
 import com.carefastindo.absensi.data.model.EmergencyAssignment
 import com.carefastindo.absensi.data.model.Notification
 import com.carefastindo.absensi.data.model.OffSchedule
+import com.carefastindo.absensi.data.model.OvertimeAssignment
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.utils.ShiftHelper
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -67,6 +68,7 @@ class EmployeeDashboardFragment : Fragment() {
     private var companyConfig: CompanyConfig? = null
     private var activeAdminNotification: Notification? = null
     private var todayEmergencyAssignment: EmergencyAssignment? = null
+    private var activeOvertimeAssignment: OvertimeAssignment? = null
 
     // Temp variables for face verification
     private var pendingAttendanceType: String = ""
@@ -244,6 +246,19 @@ class EmployeeDashboardFragment : Fragment() {
                 }
                 todayEmergencyAssignment = todayEmergencyList.firstOrNull { it.status == "pending" || it.status == "active" }
                     ?: todayEmergencyList.firstOrNull()
+
+                // 7. Fetch active overtime assignment for today (untuk tombol overtime_in / overtime_out)
+                val overtimeList = withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("overtime_assignments")
+                        .select {
+                            filter {
+                                eq("user_id", userId)
+                                eq("assignment_date", todayStr)
+                            }
+                        }.decodeList<OvertimeAssignment>()
+                }
+                activeOvertimeAssignment = overtimeList.firstOrNull { it.status == "pending" || it.status == "active" }
+                    ?: overtimeList.firstOrNull()
 
                 updateUI()
             } catch (e: Exception) {
