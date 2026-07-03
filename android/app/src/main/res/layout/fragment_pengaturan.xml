@@ -89,62 +89,6 @@
                 </LinearLayout>
             </androidx.cardview.widget.CardView>
 
-            <!-- Section 2: Shift Default Fallback -->
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="Jam Kerja Default (Fallback)"
-                android:textColor="@color/text_primary_light"
-                android:textSize="16sp"
-                android:textStyle="bold"
-                android:layout_marginBottom="12dp" />
-
-            <androidx.cardview.widget.CardView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="24dp"
-                app:cardCornerRadius="16dp"
-                app:cardElevation="2dp"
-                app:cardBackgroundColor="@color/white">
-
-                <LinearLayout
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:orientation="vertical"
-                    android:padding="16dp">
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Jam Masuk Kerja (HH:mm:ss)">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edtCheckInStart"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="text"
-                            android:text="08:00:00" />
-                    </com.google.android.material.textfield.TextInputLayout>
-
-                    <Space
-                        android:layout_height="12dp"
-                        android:layout_width="wrap_content" />
-
-                    <com.google.android.material.textfield.TextInputLayout
-                        style="@style/Widget.MaterialComponents.TextInputLayout.OutlinedBox"
-                        android:layout_width="match_parent"
-                        android:layout_height="wrap_content"
-                        android:hint="Jam Pulang Kerja (HH:mm:ss)">
-                        <com.google.android.material.textfield.TextInputEditText
-                            android:id="@+id/edtCheckInEnd"
-                            android:layout_width="match_parent"
-                            android:layout_height="wrap_content"
-                            android:inputType="text"
-                            android:text="17:00:00" />
-                    </com.google.android.material.textfield.TextInputLayout>
-                </LinearLayout>
-            </androidx.cardview.widget.CardView>
-
             <!-- Save settings button -->
             <Button
                 android:id="@+id/btnSaveSettings"

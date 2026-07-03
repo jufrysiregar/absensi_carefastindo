@@ -22,7 +22,8 @@ import com.carefastindo.absensi.data.model.CompanyConfig
 import com.carefastindo.absensi.data.model.EmergencyAssignment
 import com.carefastindo.absensi.data.model.Notification
 import com.carefastindo.absensi.data.model.OffSchedule
-import com.carefastindo.absensi.data.remote.SupabaseClientimport com.carefastindo.absensi.utils.ShiftHelper
+import com.carefastindo.absensi.data.remote.SupabaseClient
+import com.carefastindo.absensi.utils.ShiftHelper
 import com.google.android.gms.location.FusedLocationProviderClient
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
@@ -455,31 +456,135 @@ class EmployeeDashboardFragment : Fragment() {
             return
         }
 
-        // QR Code is only required for check-in. Break and check-out continue with GPS + face verification.
+        // QR Code is only required for check-in.
         val options = GmsBarcodeScannerOptions.Builder()
             .setBarcodeFormats(com.google.mlkit.vision.barcode.common.Barcode.FORMAT_QR_CODE)
             .build()
         val scanner = GmsBarcodeScanning.getClient(requireContext(), options)
-        
+
         scanner.startScan()
             .addOnSuccessListener { barcode: com.google.mlkit.vision.barcode.common.Barcode ->
-                val scannedValue = barcode.rawValue
-                val expectedSecret = companyConfig?.qrSecret ?: "CARE_OFFICE_MAIN"
-
-                if (scannedValue == expectedSecret) {
-                    // Step 2: Verify Location (GPS)
-                    checkLocationAndExecute(type)
-                } else {
-                    MaterialAlertDialogBuilder(requireContext())
-                        .setTitle("QR Code Salah")
-                        .setMessage("QR Code yang Anda scan tidak valid untuk absensi kantor ini.")
-                        .setPositiveButton("OK", null)
-                        .show()
-                }
+                val scannedValue = barcode.rawValue ?: ""
+                validateAndProceedQR(scannedValue, type)
             }
             .addOnFailureListener { e: Exception ->
                 Toast.makeText(requireContext(), "Gagal scan QR: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
             }
+    }
+
+    private fun validateAndProceedQR(scannedValue: String, type: String) {
+        lifecycleScope.launch {
+            try {
+                // 1. Parse JSON
+                val json = try {
+                    org.json.JSONObject(scannedValue)
+                } catch (e: Exception) {
+                    showQRError("QR Code yang di scan tidak benar. Silahkan hubungi admin.")
+                    return@launch
+                }
+
+                val qrShiftId = json.optString("shift_id", "")
+                val expiresAt = json.optString("expires_at", "")
+
+                if (qrShiftId.isEmpty() || expiresAt.isEmpty()) {
+                    showQRError("QR Code yang di scan tidak benar. Silahkan hubungi admin.")
+                    return@launch
+                }
+
+                // 2. Cek expired
+                try {
+                    val formats = listOf(
+                        "yyyy-MM-dd'T'HH:mm:ss.SSS'Z'",
+                        "yyyy-MM-dd'T'HH:mm:ss'Z'",
+                        "yyyy-MM-dd'T'HH:mm:ss.SSSXXX"
+                    )
+                    var expDate: java.util.Date? = null
+                    for (fmt in formats) {
+                        try {
+                            val sdf = java.text.SimpleDateFormat(fmt, java.util.Locale.getDefault())
+                            sdf.timeZone = java.util.TimeZone.getTimeZone("UTC")
+                            expDate = sdf.parse(expiresAt)
+                            if (expDate != null) break
+                        } catch (e: Exception) { /* try next */ }
+                    }
+                    if (expDate != null && expDate.before(java.util.Date())) {
+                        showQRError("QR Code sudah kadaluarsa. Silahkan minta admin untuk generate QR baru.")
+                        return@launch
+                    }
+                } catch (e: Exception) {
+                    showQRError("QR Code yang di scan tidak benar. Silahkan hubungi admin.")
+                    return@launch
+                }
+
+                // 3. Cek apakah shift_id di QR sesuai dengan shift karyawan ini
+                val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+                if (userId == null) {
+                    showQRError("Sesi tidak valid. Silahkan login ulang.")
+                    return@launch
+                }
+
+                val todayStr = run {
+                    val user = viewModel.uiState.value.user
+                    ShiftHelper.getAttendanceDate(user?.role ?: "", user?.shiftType)
+                }
+
+                // Ambil shift_id karyawan dari user_shifts hari ini
+                val userShiftData = withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    try {
+                        SupabaseClient.db.from("user_shifts")
+                            .select {
+                                filter {
+                                    eq("user_id", userId)
+                                    eq("effective_date", todayStr)
+                                }
+                                order("created_at", io.github.jan.supabase.postgrest.query.Order.DESCENDING)
+                            }
+                            .decodeList<Map<String, kotlinx.serialization.json.JsonElement>>()
+                    } catch (e: Exception) {
+                        emptyList()
+                    }
+                }
+
+                val userShiftId = userShiftData.firstOrNull()
+                    ?.get("shift_id")
+                    ?.let {
+                        if (it is kotlinx.serialization.json.JsonPrimitive && !it.isString.not()) it.content
+                        else it.toString().trim('"')
+                    }
+                    ?: ""
+
+                if (userShiftId.isEmpty()) {
+                    // Karyawan tidak punya shift hari ini — cek apakah punya emergency assignment (ganti off/lembur)
+                    val hasEmergency = hasEmergencyAssignmentToday
+                    if (!hasEmergency) {
+                        showQRError("Anda tidak memiliki jadwal shift hari ini.")
+                        return@launch
+                    }
+                    // Emergency assignment: scan QR manapun yang valid dan belum expired boleh
+                    checkLocationAndExecute(type)
+                    return@launch
+                }
+
+                if (userShiftId != qrShiftId) {
+                    showQRError("QR Code yang di scan tidak benar. Silahkan hubungi admin.")
+                    return@launch
+                }
+
+                // Semua valid — lanjut ke GPS
+                checkLocationAndExecute(type)
+
+            } catch (e: Exception) {
+                showQRError("Terjadi kesalahan saat memvalidasi QR. Coba lagi.")
+            }
+        }
+    }
+
+    private fun showQRError(message: String) {
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle("QR Code Tidak Valid")
+            .setMessage(message)
+            .setPositiveButton("OK", null)
+            .show()
     }
 
     private fun checkLocationAndExecute(type: String) {

@@ -1932,8 +1932,6 @@ class TabSettingsFragment : Fragment() {
     private lateinit var edtLatitude: TextInputEditText
     private lateinit var edtLongitude: TextInputEditText
     private lateinit var edtRadius: TextInputEditText
-    private lateinit var edtCheckInStart: TextInputEditText
-    private lateinit var edtCheckInEnd: TextInputEditText
     private lateinit var btnSaveSettings: Button
     private lateinit var loadingOverlay: FrameLayout
 
@@ -1945,8 +1943,6 @@ class TabSettingsFragment : Fragment() {
         edtLatitude = view.findViewById(R.id.edtLatitude)
         edtLongitude = view.findViewById(R.id.edtLongitude)
         edtRadius = view.findViewById(R.id.edtRadius)
-        edtCheckInStart = view.findViewById(R.id.edtCheckInStart)
-        edtCheckInEnd = view.findViewById(R.id.edtCheckInEnd)
         btnSaveSettings = view.findViewById(R.id.btnSaveSettings)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
@@ -1970,8 +1966,6 @@ class TabSettingsFragment : Fragment() {
                     edtLatitude.setText(config.officeLat.toString())
                     edtLongitude.setText(config.officeLng.toString())
                     edtRadius.setText(config.radius.toInt().toString())
-                    edtCheckInStart.setText(config.defaultStartTime ?: "08:00:00")
-                    edtCheckInEnd.setText(config.defaultEndTime ?: "17:00:00")
                 }
             } catch (e: Exception) {
                 view?.let { Snackbar.make(it, "Gagal memuat konfigurasi: ${e.localizedMessage}", Snackbar.LENGTH_LONG).show() }
@@ -1985,10 +1979,8 @@ class TabSettingsFragment : Fragment() {
         val lat = edtLatitude.text.toString().toDoubleOrNull()
         val lng = edtLongitude.text.toString().toDoubleOrNull()
         val radius = edtRadius.text.toString().toIntOrNull()
-        val start = edtCheckInStart.text.toString().trim()
-        val end = edtCheckInEnd.text.toString().trim()
 
-        if (lat == null || lng == null || radius == null || start.isEmpty() || end.isEmpty()) {
+        if (lat == null || lng == null || radius == null) {
             Toast.makeText(context, "Mohon isi semua bidang dengan benar!", Toast.LENGTH_SHORT).show()
             return
         }
@@ -2000,9 +1992,7 @@ class TabSettingsFragment : Fragment() {
                     id = "companyConfig",
                     officeLat = lat,
                     officeLng = lng,
-                    radius = radius,
-                    defaultStartTime = start,
-                    defaultEndTime = end
+                    radius = radius
                 )
 
                 withContext(Dispatchers.IO) {

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { createClient } from '@/lib/supabase/client'
@@ -103,37 +103,31 @@ interface EmergencyRow {
   created_at: string
 }
 
-const PAGE_SIZE = 10
-
-function calculateBreakDuration(start: string | null, end: string | null): { text: string; isWarning: boolean } {
-  if (!start || !end) return { text: '—', isWarning: false }
-  try {
-    const s = new Date(start)
-    const e = new Date(end)
-    const diffMs = e.getTime() - s.getTime()
-    if (diffMs <= 0) return { text: '—', isWarning: false }
-    const diffMins = Math.round(diffMs / 60000)
-    
-    const hrs = Math.floor(diffMins / 60)
-    const mins = diffMins % 60
-    let durationText = ''
-    if (hrs > 0) {
-      durationText = `${hrs} jam ${mins} menit`
-    } else {
-      durationText = `${mins} menit`
-    }
-    return {
-      text: durationText,
-      isWarning: diffMins > 60
-    }
-  } catch (err) {
-    return { text: '—', isWarning: false }
-  }
+// ─── Activity Log types ───────────────────────────────────
+interface ActivityLogRow {
+  id: string
+  source: 'shift' | 'off' | 'emergency'
+  user_name: string
+  activity_type: 'Change Shift' | 'Off Day' | 'Lembur' | 'Ganti Off'
+  effective_date: string
+  created_at: string
+  // raw data for edit
+  raw_shift_id?: string
+  raw_user_id?: string
+  raw_shift_name?: string
+  raw_replacing_user_name?: string
+  raw_replacing_user_id?: string
+  raw_emergency_id?: string
 }
+
+
 
 export default function ManagementEmployeePage() {
   const supabase = createClient()
   const queryClient = useQueryClient()
+
+  const PAGE_SIZE = 10
+  const ACT_PAGE_SIZE = 10
 
   // Tab State / Table Filter States
   const [search, setSearch] = useState('')
@@ -150,6 +144,7 @@ export default function ManagementEmployeePage() {
     shiftId: ''
   })
   const [addingUser, setAddingUser] = useState(false)
+  const [showAddPassword, setShowAddPassword] = useState(false)
 
   // Edit User Modal state
   const [editingUser, setEditingUser] = useState<UserRow | null>(null)
@@ -157,9 +152,11 @@ export default function ManagementEmployeePage() {
     name: '',
     role: '',
     nip: '',
-    shiftId: ''
+    shiftId: '',
+    password: ''
   })
   const [updatingUser, setUpdatingUser] = useState(false)
+  const [showEditPassword, setShowEditPassword] = useState(false)
 
   // Delete User Modal state
   const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
@@ -178,7 +175,11 @@ export default function ManagementEmployeePage() {
   // Attendance table filters & pagination
   const todayStr = new Date().toISOString().split('T')[0]
 
-  // ─── Off Day state ──────────────────────────────────────
+  // ─── Modal Perubahan Jadwal state ──────────────────────
+  const [showJadwalModal, setShowJadwalModal] = useState(false)
+  const [jadwalMenu, setJadwalMenu] = useState<'change_shift' | 'atur_off' | 'lembur' | 'ganti_off' | ''>('')
+
+
   const [offForm, setOffForm] = useState({
     userId: '',
     offDate: new Date().toISOString().split('T')[0],
@@ -224,6 +225,23 @@ export default function ManagementEmployeePage() {
   const [savingAtt, setSavingAtt] = useState(false)
 
   const debouncedAttSearch = useDebounce(attSearch, 500)
+
+  // ─── Company Config / Radius state ─────────────────────
+  const [showRadiusModal, setShowRadiusModal] = useState(false)
+  const [radiusForm, setRadiusForm] = useState({
+    officeLat: '',
+    officeLng: '',
+    radius: '',
+    defaultStartTime: '',
+    defaultEndTime: '',
+  })
+  const [savingRadius, setSavingRadius] = useState(false)
+
+
+  const [actPage, setActPage] = useState(1)
+  const [actFilterDate, setActFilterDate] = useState(todayStr)
+  const [editActivityRow, setEditActivityRow] = useState<ActivityLogRow | null>(null)
+  const [deleteActivityId, setDeleteActivityId] = useState<{ id: string; source: ActivityLogRow['source'] } | null>(null)
 
   // Realtime subscription
   useEffect(() => {
@@ -280,7 +298,7 @@ export default function ManagementEmployeePage() {
   const { data: shifts = [] } = useQuery({
     queryKey: ['shifts-select'],
     queryFn: async () => {
-      const { data } = await supabase.from('shifts').select('id, name').eq('is_active', true)
+      const { data } = await supabase.from('shifts').select('id, name, start_time').eq('is_active', true)
       return data ?? []
     }
   })
@@ -331,6 +349,167 @@ export default function ManagementEmployeePage() {
       return historyRows
     }
   })
+
+  // ─── Activity Log query (semua jenis perubahan, pagination, filter tanggal) ──
+  const { data: activityData, isLoading: activityLoading } = useQuery({
+    queryKey: ['activityLog', actPage, actFilterDate],
+    queryFn: async () => {
+      const rows: ActivityLogRow[] = []
+
+      // 1. Change Shift dari user_shifts (shift_type bukan 'off')
+      const { data: shiftData } = await supabase
+        .from('user_shifts')
+        .select('id, user_id, shift_id, effective_date, created_at, users(name), shifts(name)')
+        .neq('shift_type', 'off')
+        .eq('effective_date', actFilterDate)
+        .order('created_at', { ascending: false })
+
+      ;(shiftData ?? []).forEach((r: any) => {
+        rows.push({
+          id: r.id,
+          source: 'shift',
+          user_name: r.users?.name ?? '—',
+          activity_type: 'Change Shift',
+          effective_date: r.effective_date,
+          created_at: r.created_at,
+          raw_shift_id: r.shift_id,
+          raw_user_id: r.user_id,
+          raw_shift_name: r.shifts?.name ?? '—',
+        })
+      })
+
+      // 2. Off Day dari user_shifts (shift_type = 'off')
+      const { data: offData } = await supabase
+        .from('user_shifts')
+        .select('id, user_id, effective_date, created_at, users(name)')
+        .eq('shift_type', 'off')
+        .eq('effective_date', actFilterDate)
+        .order('created_at', { ascending: false })
+
+      ;(offData ?? []).forEach((r: any) => {
+        rows.push({
+          id: r.id,
+          source: 'off',
+          user_name: r.users?.name ?? '—',
+          activity_type: 'Off Day',
+          effective_date: r.effective_date,
+          created_at: r.created_at,
+          raw_user_id: r.user_id,
+        })
+      })
+
+      // 3. Lembur & Ganti Off dari emergency_assignments
+      const { data: emergData } = await supabase
+        .from('emergency_assignments')
+        .select('id, assigned_user_id, replacing_user_id, reason, target_date, created_at, assigned_user:users!emergency_assignments_assigned_user_id_fkey(name), replacing_user:users!emergency_assignments_replacing_user_id_fkey(name), shift:shifts(name)')
+        .eq('target_date', actFilterDate)
+        .order('created_at', { ascending: false })
+
+      ;(emergData ?? []).forEach((r: any) => {
+        rows.push({
+          id: r.id,
+          source: 'emergency',
+          user_name: r.assigned_user?.name ?? '—',
+          activity_type: r.reason === 'lembur' ? 'Lembur' : 'Ganti Off',
+          effective_date: r.target_date,
+          created_at: r.created_at,
+          raw_user_id: r.assigned_user_id,
+          raw_shift_name: r.shift?.name ?? undefined,
+          raw_replacing_user_name: r.replacing_user?.name ?? undefined,
+          raw_replacing_user_id: r.replacing_user_id ?? undefined,
+          raw_emergency_id: r.id,
+        })
+      })
+
+      // Sort by created_at desc, paginate
+      rows.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      const total = rows.length
+      const paged = rows.slice((actPage - 1) * ACT_PAGE_SIZE, actPage * ACT_PAGE_SIZE)
+      return { rows: paged, total }
+    },
+    placeholderData: (prev) => prev,
+  })
+
+  const actRows = activityData?.rows ?? []
+  const actTotal = activityData?.total ?? 0
+  const actTotalPages = Math.ceil(actTotal / ACT_PAGE_SIZE)
+
+  // Delete activity mutation
+  const deleteActivityMutation = useMutation({
+    mutationFn: async ({ id, source }: { id: string; source: ActivityLogRow['source'] }) => {
+      if (source === 'emergency') {
+        const { error } = await supabase.from('emergency_assignments').delete().eq('id', id)
+        if (error) throw error
+      } else {
+        const { error } = await supabase.from('user_shifts').delete().eq('id', id)
+        if (error) throw error
+      }
+    },
+    onSuccess: () => {
+      toast.success('Data berhasil dihapus!')
+      queryClient.invalidateQueries({ queryKey: ['activityLog'] })
+      queryClient.invalidateQueries({ queryKey: ['offDays'] })
+      queryClient.invalidateQueries({ queryKey: ['emergency-users'] })
+      queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
+      setDeleteActivityId(null)
+    },
+    onError: (e: any) => toast.error('Gagal menghapus: ' + e.message)
+  })
+
+  // ─── Company Config query & mutation ────────────────────
+  const { data: companyConfig, refetch: refetchConfig } = useQuery({
+    queryKey: ['companyConfig'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('*')
+        .eq('id', 'companyConfig')
+        .maybeSingle()
+      if (error) throw error
+      return data
+    }
+  })
+
+  function openRadiusModal() {
+    setRadiusForm({
+      officeLat: companyConfig?.office_lat?.toString() ?? '',
+      officeLng: companyConfig?.office_lng?.toString() ?? '',
+      radius: companyConfig?.radius?.toString() ?? '',
+      defaultStartTime: companyConfig?.default_start_time ?? '08:00:00',
+      defaultEndTime: companyConfig?.default_end_time ?? '17:00:00',
+    })
+    setShowRadiusModal(true)
+  }
+
+  async function handleSaveRadius(e: React.FormEvent) {
+    e.preventDefault()
+    const lat = parseFloat(radiusForm.officeLat)
+    const lng = parseFloat(radiusForm.officeLng)
+    const radius = parseInt(radiusForm.radius)
+    if (isNaN(lat) || isNaN(lng) || isNaN(radius)) {
+      toast.error('Semua kolom wajib diisi dengan benar!')
+      return
+    }
+    setSavingRadius(true)
+    try {
+      const { error } = await supabase
+        .from('settings')
+        .update({
+          office_lat: lat,
+          office_lng: lng,
+          radius,
+        })
+        .eq('id', 'companyConfig')
+      if (error) throw error
+      toast.success('Konfigurasi kantor berhasil diperbarui!')
+      setShowRadiusModal(false)
+      refetchConfig()
+    } catch (err: any) {
+      toast.error('Gagal menyimpan: ' + err.message)
+    } finally {
+      setSavingRadius(false)
+    }
+  }
 
   // Fetch attendance query
   const { data: attendanceData, isLoading: attendanceLoading } = useQuery({
@@ -462,11 +641,13 @@ export default function ManagementEmployeePage() {
   // Open Edit Modal helper
   function openEditModal(user: UserRow) {
     setEditingUser(user)
+    setShowEditPassword(false)
     setEditForm({
       name: user.name,
       role: user.role,
       nip: user.nip === '—' ? '' : user.nip,
-      shiftId: user.shift_id
+      shiftId: user.shift_id,
+      password: ''
     })
   }
 
@@ -480,6 +661,10 @@ export default function ManagementEmployeePage() {
     }
     if (editForm.nip.length !== 6 || isNaN(Number(editForm.nip))) {
       toast.error('NIP harus berisi 6 digit angka!')
+      return
+    }
+    if (editForm.password && editForm.password.length < 6) {
+      toast.error('Password minimal 6 karakter!')
       return
     }
     setUpdatingUser(true)
@@ -496,7 +681,25 @@ export default function ManagementEmployeePage() {
 
       if (userError) throw userError
 
-      // 2. Insert new user_shifts row if shift changed (maintaining historical logs)
+      // 2. Update password jika diisi
+      if (editForm.password && editForm.password.trim() !== '') {
+        const res = await fetch('/api/users/update-password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: editingUser.id, newPassword: editForm.password })
+        })
+        const data = await res.json()
+        if (data.error) throw new Error(data.error)
+
+        // Kirim notifikasi perubahan password ke karyawan
+        await supabase.from('notifications').insert({
+          user_id: editingUser.id,
+          message: 'Admin telah memperbaharui password akun anda, silahkan coba relogin untuk memastikan password baru anda apakah sudah bisa digunakan. Terimakasih.',
+          is_read: false,
+        })
+      }
+
+      // 3. Insert new user_shifts row if shift changed (maintaining historical logs)
       if (editForm.shiftId !== editingUser.shift_id) {
         const { error: shiftError } = await supabase
           .from('user_shifts')
@@ -511,6 +714,7 @@ export default function ManagementEmployeePage() {
 
       toast.success('Data karyawan berhasil diperbarui!')
       setEditingUser(null)
+      setShowEditPassword(false)
       queryClient.invalidateQueries({ queryKey: ['users'] })
       queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
     } catch (err: any) {
@@ -556,6 +760,13 @@ export default function ManagementEmployeePage() {
         })
 
       if (error) throw error
+
+      // Kirim notifikasi perubahan shift ke karyawan
+      await supabase.from('notifications').insert({
+        user_id: payload.userId,
+        message: 'Admin mengubah jadwal shift kerja kamu, silahkan absen sesuai jam yang ditentukan. Tetap semangat dalam bekerja dan ciptakan kualitas kerja mu yang terbaik.',
+        is_read: false,
+      })
     },
     onSuccess: () => {
       toast.success('Shift karyawan berhasil diperbarui!')
@@ -648,6 +859,13 @@ export default function ManagementEmployeePage() {
           keterangan: payload.keterangan || null,
         })
       if (error) throw error
+
+      // Kirim notifikasi ke karyawan
+      await supabase.from('notifications').insert({
+        user_id: payload.userId,
+        message: 'Ada tugas baru buat kamu, yaitu "Lembur". Silahkan melakukan absensi, agar kehitung di sistem untuk keperluan penggajian. Terimakasih.',
+        is_read: false,
+      })
     },
     onSuccess: () => {
       toast.success('Lembur berhasil di-assign!')
@@ -788,6 +1006,30 @@ export default function ManagementEmployeePage() {
         const { error } = await supabase.from('emergency_assignments').insert(body)
         if (error) throw error
       }
+
+      // Kirim notifikasi ke karyawan yang di-assign
+      if (payload.reason === 'lembur') {
+        await supabase.from('notifications').insert({
+          user_id: payload.assigned_user_id,
+          message: 'Ada tugas baru buat kamu, yaitu "Lembur". Silahkan melakukan absensi, agar kehitung di sistem untuk keperluan penggajian. Terimakasih.',
+          is_read: false,
+        })
+      } else if (payload.reason === 'ganti_off') {
+        // Notifikasi ke karyawan yang digantikan (assigned_user_id)
+        await supabase.from('notifications').insert({
+          user_id: payload.assigned_user_id,
+          message: 'Permintaan mu untuk ganti off dengan rekan kerja telah di perbaharui, silahkan cek. Terimakasih.',
+          is_read: false,
+        })
+        // Notifikasi juga ke karyawan pengganti (replacing_user_id) jika ada
+        if (payload.replacing_user_id) {
+          await supabase.from('notifications').insert({
+            user_id: payload.replacing_user_id,
+            message: 'Permintaan mu untuk ganti off dengan rekan kerja telah di perbaharui, silahkan cek. Terimakasih.',
+            is_read: false,
+          })
+        }
+      }
     },
     onSuccess: () => {
       toast.success(editEmergencyRow ? 'Penugasan diupdate!' : 'Penugasan disimpan!')
@@ -815,6 +1057,26 @@ export default function ManagementEmployeePage() {
     setEditEmergencyRow(null)
     setShowEmergencyForm(false)
     setOffUsersOnDate([])
+  }
+
+  // ─── Open edit dari activity log ─────────────────────────
+  function openEditFromActivity(row: ActivityLogRow) {
+    setEditActivityRow(row)
+    if (row.activity_type === 'Change Shift') {
+      setJadwalMenu('change_shift')
+      setShiftForm(f => ({ ...f, userId: row.raw_user_id ?? '', shiftId: row.raw_shift_id ?? '', effectiveDate: row.effective_date }))
+    } else if (row.activity_type === 'Off Day') {
+      setJadwalMenu('atur_off')
+      setOffForm(f => ({ ...f, userId: row.raw_user_id ?? '', offDate: row.effective_date }))
+    } else if (row.activity_type === 'Lembur') {
+      setJadwalMenu('lembur')
+      setEmergencyForm(f => ({ ...f, assigned_user_id: row.raw_user_id ?? '', target_date: row.effective_date, reason: 'lembur', shift_id: '' }))
+    } else if (row.activity_type === 'Ganti Off') {
+      setJadwalMenu('ganti_off')
+      setEmergencyForm(f => ({ ...f, assigned_user_id: row.raw_user_id ?? '', target_date: row.effective_date, reason: 'ganti_off', replacing_user_id: row.raw_replacing_user_id ?? '' }))
+      loadOffUsersOnDate(row.effective_date)
+    }
+    setShowJadwalModal(true)
   }
 
   async function loadOffUsersOnDate(date: string) {
@@ -973,13 +1235,29 @@ export default function ManagementEmployeePage() {
         <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <CardTitle className="text-lg font-bold text-slate-800">👥 Daftar Karyawan</CardTitle>
-            <Button 
-              onClick={() => setShowAddModal(true)} 
-              className="bg-blue-600 hover:bg-blue-700 text-white font-medium self-start sm:self-auto"
-            >
-              <Plus className="w-4 h-4 mr-1.5" />
-              Tambah Karyawan
-            </Button>
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              <Button
+                onClick={() => openRadiusModal()}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-medium"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Atur Radius Lokasi Absensi
+              </Button>
+              <Button
+                onClick={() => { setShowJadwalModal(true); setJadwalMenu('') }}
+                className="bg-slate-600 hover:bg-slate-700 text-white font-medium"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Ubah Jadwal Karyawan
+              </Button>
+              <Button 
+                onClick={() => { setShowAddModal(true); setShowAddPassword(false); setAddUserForm({ name: '', email: '', password: '', role: 'cleaner', nip: '', shiftId: '' }) }}
+                className="bg-blue-600 hover:bg-blue-700 text-white font-medium"
+              >
+                <Plus className="w-4 h-4 mr-1.5" />
+                Tambah Karyawan
+              </Button>
+            </div>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mt-4">
             <div className="flex items-center gap-2">
@@ -1017,12 +1295,12 @@ export default function ManagementEmployeePage() {
             <Table className="border-collapse w-full">
               <TableHeader className="bg-[#F8FAFC]">
                 <TableRow className="hover:bg-transparent border-b border-slate-200">
-                  <TableHead className="text-slate-600 font-semibold py-3 pl-4">No</TableHead>
+                  <TableHead className="text-slate-600 font-semibold py-3 pl-4 text-center">No</TableHead>
                   <TableHead className="text-slate-600 font-semibold py-3">Nama</TableHead>
                   <TableHead className="text-slate-600 font-semibold py-3">Email</TableHead>
-                  <TableHead className="text-slate-600 font-semibold py-3">NIP</TableHead>
-                  <TableHead className="text-slate-600 font-semibold py-3">Role</TableHead>
-                  <TableHead className="text-slate-600 font-semibold py-3">Shift Saat Ini</TableHead>
+                  <TableHead className="text-slate-600 font-semibold py-3 text-center">NIP</TableHead>
+                  <TableHead className="text-slate-600 font-semibold py-3 text-center">Role</TableHead>
+                  <TableHead className="text-slate-600 font-semibold py-3 text-center">Shift Saat Ini</TableHead>
                   <TableHead className="text-slate-600 font-semibold py-3 pr-4 text-center">Aksi</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1046,18 +1324,18 @@ export default function ManagementEmployeePage() {
                 ) : (
                   filteredUsers.map((u, i) => (
                     <TableRow key={u.id} className="bg-white border-b border-slate-100 hover:bg-slate-50/50">
-                      <TableCell className="font-mono text-xs text-slate-400 py-3 pl-4">{i + 1}</TableCell>
+                      <TableCell className="font-mono text-xs text-slate-400 py-3 pl-4 text-center">{i + 1}</TableCell>
                       <TableCell className="font-semibold text-slate-700 py-3">{u.name}</TableCell>
                       <TableCell className="text-slate-500 text-sm py-3">{u.email}</TableCell>
-                      <TableCell className="text-slate-600 font-mono text-sm py-3">
+                      <TableCell className="text-slate-600 font-mono text-sm py-3 text-center">
                         {u.role.toLowerCase() === 'superadmin' ? 'N/A' : u.nip}
                       </TableCell>
-                      <TableCell className="py-3">
+                      <TableCell className="py-3 text-center">
                         <Badge variant={getRoleVariant(u.role) as any} className="capitalize font-medium">
                           {u.role === 'supervisor' ? 'Supervisor' : u.role}
                         </Badge>
                       </TableCell>
-                      <TableCell className="text-slate-600 font-medium py-3">
+                      <TableCell className="text-slate-600 font-medium py-3 text-center">
                         {u.role.toLowerCase() === 'superadmin' ? 'N/A' : u.current_shift}
                       </TableCell>
                       <TableCell className="py-3 pr-4 text-center">
@@ -1095,541 +1373,83 @@ export default function ManagementEmployeePage() {
         </CardContent>
       </Card>
 
-      {/* 2. UBAH SHIFT / KERJA LEMBUR */}
-      <div style={{
-        background: '#FFFFFF',
-        border: '1px solid #E2E8F0',
-        borderRadius: '12px',
-        padding: '24px',
-        boxShadow: '0 1px 3px rgba(0,0,0,0.05)',
-      }}>
-        <h3 style={{
-          fontSize: '18px',
-          fontWeight: 'bold',
-          color: '#0F172A',
-          marginBottom: '20px',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '8px',
-        }}>
-          🔄 Ubah Shift / Kerja Lembur
-        </h3>
-
-        <form onSubmit={handleUpdateShift}>
-          {/* BARIS 1 & 2: 4 input dalam grid 2 kolom */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
-            {/* Karyawan */}
-            <div>
-              <label htmlFor="shiftUserId" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                Karyawan <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-              <select
-                id="shiftUserId"
-                value={shiftForm.userId}
-                onChange={e => setShiftForm(f => ({ ...f, userId: e.target.value }))}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  color: '#0F172A',
-                  background: '#FFFFFF',
-                  outline: 'none',
-                  transition: 'border 0.2s, box-shadow 0.2s',
-                }}
-                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
-                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
-              >
-                <option value="" disabled>Pilih Karyawan</option>
-                {users
-                  .filter(u => u.role.toLowerCase() !== 'superadmin')
-                  .map(u => (
-                    <option key={u.id} value={u.id}>{u.name} ({u.nip !== '—' ? u.nip : u.role})</option>
-                  ))
-                }
-              </select>
-            </div>
-
-            {/* Tanggal Efektif */}
-            <div>
-              <label htmlFor="shiftDate" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                Tanggal Efektif <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-              <input
-                id="shiftDate"
-                type="date"
-                value={shiftForm.effectiveDate}
-                onChange={e => setShiftForm(f => ({ ...f, effectiveDate: e.target.value }))}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  color: '#0F172A',
-                  background: '#FFFFFF',
-                  outline: 'none',
-                  transition: 'border 0.2s, box-shadow 0.2s',
-                  boxSizing: 'border-box',
-                }}
-                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
-                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
-              />
-            </div>
-
-            {/* Shift Baru */}
-            <div>
-              <label htmlFor="shiftNewId" style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                Shift Baru <span style={{ color: '#EF4444' }}>*</span>
-              </label>
-              <select
-                id="shiftNewId"
-                value={shiftForm.shiftId}
-                onChange={e => setShiftForm(f => ({ ...f, shiftId: e.target.value }))}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  color: '#0F172A',
-                  background: '#FFFFFF',
-                  outline: 'none',
-                  transition: 'border 0.2s, box-shadow 0.2s',
-                }}
-                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
-                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
-              >
-                <option value="" disabled>Pilih Shift Baru</option>
-                {shifts.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-                {shiftForm.shiftType === 'single' && <option value="none">Tanpa Shift</option>}
-              </select>
-            </div>
-
-            {/* Keterangan */}
-            <div>
-              <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-                Keterangan
-              </label>
-              <input
-                type="text"
-                placeholder="Alasan lembur / perubahan shift..."
-                value={shiftForm.keterangan}
-                onChange={e => setShiftForm(f => ({ ...f, keterangan: e.target.value }))}
-                style={{
-                  width: '100%',
-                  padding: '10px 14px',
-                  border: '1px solid #E2E8F0',
-                  borderRadius: '8px',
-                  fontSize: '14px',
-                  color: '#0F172A',
-                  background: '#FFFFFF',
-                  outline: 'none',
-                  transition: 'border 0.2s, box-shadow 0.2s',
-                  boxSizing: 'border-box',
-                }}
-                onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
-                onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
-              />
-            </div>
-          </div>
-
-          {/* Tipe Perubahan */}
-          <div style={{ marginTop: '16px' }}>
-            <label style={{ display: 'block', fontSize: '14px', fontWeight: '600', color: '#334155', marginBottom: '4px' }}>
-              Tipe Perubahan <span style={{ color: '#EF4444' }}>*</span>
-            </label>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '24px', flexWrap: 'wrap' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="shiftType"
-                  value="single"
-                  checked={shiftForm.shiftType === 'single'}
-                  onChange={e => setShiftForm(f => ({ ...f, shiftType: e.target.value }))}
-                  style={{ width: '16px', height: '16px', accentColor: '#3B82F6' }}
-                />
-                <span style={{ fontSize: '14px', color: '#334155' }}>Ganti Shift (Single Shift)</span>
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
-                <input
-                  type="radio"
-                  name="shiftType"
-                  value="double"
-                  checked={shiftForm.shiftType === 'double'}
-                  onChange={e => setShiftForm(f => ({ ...f, shiftType: e.target.value }))}
-                  style={{ width: '16px', height: '16px', accentColor: '#3B82F6' }}
-                />
-                <span style={{ fontSize: '14px', color: '#334155' }}>Tambah Shift Lembur (Double Shift)</span>
-              </label>
-            </div>
-          </div>
-
-          {/* Tombol Update Shift */}
-          <div style={{ marginTop: '20px' }}>
-            <button
-              type="submit"
-              disabled={updateShiftMutation.isPending || assignOvertimeMutation.isPending}
-              style={{
-                width: '100%',
-                padding: '10px',
-                background: updateShiftMutation.isPending || assignOvertimeMutation.isPending ? '#93C5FD' : '#3B82F6',
-                color: '#FFFFFF',
-                fontSize: '14px',
-                fontWeight: '600',
-                borderRadius: '8px',
-                border: 'none',
-                cursor: updateShiftMutation.isPending || assignOvertimeMutation.isPending ? 'not-allowed' : 'pointer',
-                transition: 'background 0.2s',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px',
-              }}
-              onMouseEnter={e => {
-                if (!updateShiftMutation.isPending && !assignOvertimeMutation.isPending)
-                  (e.currentTarget as HTMLButtonElement).style.background = '#2563EB'
-              }}
-              onMouseLeave={e => {
-                if (!updateShiftMutation.isPending && !assignOvertimeMutation.isPending)
-                  (e.currentTarget as HTMLButtonElement).style.background = '#3B82F6'
-              }}
-            >
-              {updateShiftMutation.isPending || assignOvertimeMutation.isPending ? (
-                <><Loader2 className="w-4 h-4 animate-spin" />Memproses...</>
-              ) : (
-                'Update Shift'
-              )}
-            </button>
-          </div>
-        </form>
-      </div>
-
-      {/* 3. ATUR HARI OFF KARYAWAN */}
       <Card className="shadow-sm">
         <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-          <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-            🏖️ Atur Hari Off Karyawan
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-4 space-y-4">
-          {/* Form Set Off */}
-          <form onSubmit={handleSetOff}>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan *</label>
-                <select
-                  value={offForm.userId}
-                  onChange={e => setOffForm(f => ({ ...f, userId: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                >
-                  <option value="">-- Pilih Karyawan --</option>
-                  {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
-                    <option key={u.id} value={u.id}>{u.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal Off *</label>
-                <input
-                  type="date"
-                  value={offForm.offDate}
-                  onChange={e => setOffForm(f => ({ ...f, offDate: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-slate-700 mb-1">Alasan Off *</label>
-                <select
-                  value={offForm.reason}
-                  onChange={e => setOffForm(f => ({ ...f, reason: e.target.value }))}
-                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-                >
-                  <option value="libur">Libur</option>
-                  <option value="sakit">Sakit</option>
-                  <option value="cuti">Cuti</option>
-                  <option value="lainnya">Lainnya</option>
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-3 mt-4">
-              <button
-                type="submit"
-                disabled={savingOff}
-                className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white disabled:opacity-50 transition-all"
-                style={{ background: '#F97316' }}
-                onMouseEnter={e => { if (!savingOff) (e.currentTarget as HTMLButtonElement).style.background = '#EA580C' }}
-                onMouseLeave={e => { if (!savingOff) (e.currentTarget as HTMLButtonElement).style.background = '#F97316' }}
-              >
-                {savingOff && <Loader2 className="w-4 h-4 animate-spin" />}
-                Set Off
-              </button>
-              <button
-                type="button"
-                onClick={() => setOffForm({ userId: '', offDate: new Date().toISOString().split('T')[0], reason: 'libur' })}
-                className="px-5 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all"
-              >
-                Batal
-              </button>
-            </div>
-          </form>
-
-          {/* Tabel Hari Off 7 hari ke depan */}
-          <div>
-            <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">Jadwal Off (7 hari ke depan)</p>
-            <Table>
-              <TableHeader className="bg-slate-50">
-                <TableRow>
-                  <TableHead className="pl-4">Karyawan</TableHead>
-                  <TableHead>Tanggal</TableHead>
-                  <TableHead>Alasan</TableHead>
-                  <TableHead className="text-center pr-4">Aksi</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {offDaysLoading ? (
-                  Array.from({ length: 3 }).map((_, i) => (
-                    <TableRow key={i}>
-                      {Array.from({ length: 4 }).map((_, j) => (
-                        <TableCell key={j}><div className="h-4 bg-slate-100 rounded animate-pulse w-full" /></TableCell>
-                      ))}
-                    </TableRow>
-                  ))
-                ) : offDays.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center py-6 text-slate-400 pl-4">
-                      Tidak ada jadwal off dalam 7 hari ke depan
-                    </TableCell>
-                  </TableRow>
-                ) : offDays.map(od => (
-                  <TableRow key={od.id} className="hover:bg-slate-50/50">
-                    <TableCell className="font-medium text-slate-800 pl-4">{od.user_name}</TableCell>
-                    <TableCell className="text-slate-600">{od.effective_date}</TableCell>
-                    <TableCell>
-                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full capitalize bg-orange-100 text-orange-700">
-                        {od.reason}
-                      </span>
-                    </TableCell>
-                    <TableCell className="text-center pr-4">
-                      <button
-                        onClick={() => setDeleteOffId(od.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 transition-all mx-auto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* 4. DARURAT & LEMBUR */}
-      <Card className="shadow-sm">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-              ⚡ Darurat &amp; Lembur
+              {"\u231B"} Daftar Riwayat Perubahan Aktivitas
             </CardTitle>
-            <button
-              onClick={() => { setEditEmergencyRow(null); setEmergencyForm({ assigned_user_id: '', target_date: new Date().toISOString().split('T')[0], reason: 'lembur', replacing_user_id: '', shift_id: '', status: 'pending' }); setOffUsersOnDate([]); setShowEmergencyForm(true) }}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all"
-            >
-              <Plus className="w-4 h-4" /> Tambah
-            </button>
+            <div className="flex items-center gap-2">
+              <input
+                type="date"
+                value={actFilterDate}
+                onChange={e => { setActFilterDate(e.target.value); setActPage(1) }}
+                className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-9"
+              />
+            </div>
           </div>
         </CardHeader>
         <CardContent className="p-0">
-          {/* Inline form — muncul kalau showEmergencyForm */}
-          {showEmergencyForm && (
-            <div className="p-4 border-b border-slate-100 bg-slate-50/50 space-y-4">
-              <form onSubmit={handleSubmitEmergency} className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan Ditugaskan *</label>
-                    <select
-                      value={emergencyForm.assigned_user_id}
-                      onChange={e => setEmergencyForm(f => ({ ...f, assigned_user_id: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">-- Pilih Karyawan --</option>
-                      {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
-                        <option key={u.id} value={u.id}>{u.name}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal *</label>
-                    <input
-                      type="date"
-                      value={emergencyForm.target_date}
-                      onChange={e => {
-                        setEmergencyForm(f => ({ ...f, target_date: e.target.value, replacing_user_id: '' }))
-                        if (emergencyForm.reason === 'ganti_off') loadOffUsersOnDate(e.target.value)
-                      }}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-semibold text-slate-700 mb-2">Tipe Penugasan *</label>
-                  <div className="flex gap-6">
-                    {(['lembur', 'ganti_off'] as const).map(r => (
-                      <label key={r} className="flex items-center gap-2 cursor-pointer">
-                        <input
-                          type="radio" value={r} checked={emergencyForm.reason === r}
-                          onChange={() => {
-                            setEmergencyForm(f => ({ ...f, reason: r, replacing_user_id: '', shift_id: '' }))
-                            if (r === 'ganti_off') loadOffUsersOnDate(emergencyForm.target_date)
-                            else setOffUsersOnDate([])
-                          }}
-                          className="accent-blue-600"
-                        />
-                        <span className="text-sm font-medium">{r === 'ganti_off' ? 'Ganti Off' : 'Lembur'}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-
-                {emergencyForm.reason === 'ganti_off' && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">
-                      Karyawan Digantikan *
-                      <span className="text-xs font-normal text-slate-400 ml-1">(hanya karyawan yang off pada tanggal tersebut)</span>
-                    </label>
-                    {loadingOffUsers ? (
-                      <div className="text-sm text-slate-400 py-2">Memuat karyawan yang off...</div>
-                    ) : offUsersOnDate.length === 0 ? (
-                      <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
-                        Tidak ada karyawan yang off pada tanggal ini. Set hari off terlebih dahulu di section di atas.
-                      </div>
-                    ) : (
-                      <select
-                        value={emergencyForm.replacing_user_id}
-                        onChange={e => setEmergencyForm(f => ({ ...f, replacing_user_id: e.target.value }))}
-                        className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      >
-                        <option value="">-- Pilih Karyawan --</option>
-                        {offUsersOnDate.filter(u => u.id !== emergencyForm.assigned_user_id).map(u => (
-                          <option key={u.id} value={u.id}>{u.name}</option>
-                        ))}
-                      </select>
-                    )}
-                  </div>
-                )}
-
-                {emergencyForm.reason === 'lembur' && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Shift Lembur</label>
-                    <select
-                      value={emergencyForm.shift_id}
-                      onChange={e => setEmergencyForm(f => ({ ...f, shift_id: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="">-- Pilih Shift --</option>
-                      {shifts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                )}
-
-                {editEmergencyRow && (
-                  <div>
-                    <label className="block text-sm font-semibold text-slate-700 mb-1">Status</label>
-                    <select
-                      value={emergencyForm.status}
-                      onChange={e => setEmergencyForm(f => ({ ...f, status: e.target.value }))}
-                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    >
-                      <option value="pending">Pending</option>
-                      <option value="active">Aktif</option>
-                      <option value="selesai">Selesai</option>
-                    </select>
-                  </div>
-                )}
-
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={saveEmergencyMutation.isPending}
-                    className="flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 transition-all"
-                  >
-                    {saveEmergencyMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-                    {editEmergencyRow ? 'Simpan Perubahan' : 'Tambah Penugasan'}
-                  </button>
-                  <button type="button" onClick={resetEmergencyForm}
-                    className="px-5 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
-                    Batal
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
-
-          <Table>
-            <TableHeader className="bg-slate-50">
-              <TableRow>
-                <TableHead className="pl-4">No</TableHead>
-                <TableHead>Karyawan</TableHead>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Tipe</TableHead>
-                <TableHead>Detail</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead className="text-center pr-4">Aksi</TableHead>
+          <Table className="border-collapse w-full">
+            <TableHeader className="bg-[#F8FAFC]">
+              <TableRow className="hover:bg-transparent border-b border-slate-200">
+                <TableHead className="text-slate-600 font-semibold py-3 pl-4">No</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Nama Karyawan</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Nama Perubahan Jadwal</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Tanggal Efektif</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Status</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3 pr-4 text-center">Aksi</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {emergencyLoading ? (
-                Array.from({ length: 4 }).map((_, i) => (
+              {activityLoading ? (
+                Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    {Array.from({ length: 7 }).map((_, j) => (
-                      <TableCell key={j}><div className="h-4 bg-slate-100 rounded animate-pulse w-full" /></TableCell>
+                    {Array.from({ length: 6 }).map((_, j) => (
+                      <TableCell key={j} className={j === 0 ? 'pl-4' : ''}><Skeleton className="h-4 w-full max-w-[120px]" /></TableCell>
                     ))}
                   </TableRow>
                 ))
-              ) : emergencyRows.length === 0 ? (
+              ) : actRows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-slate-400">
-                    Belum ada penugasan darurat
+                  <TableCell colSpan={6} className="text-center py-10 text-slate-400 pl-4">
+                    Belum ada perubahan aktivitas pada tanggal ini
                   </TableCell>
                 </TableRow>
-              ) : emergencyRows.map((row, idx) => (
-                <TableRow key={row.id} className="hover:bg-slate-50/50">
-                  <TableCell className="pl-4 text-slate-400 text-sm">{idx + 1}</TableCell>
-                  <TableCell className="font-medium text-slate-800">{row.assigned_user_name}</TableCell>
-                  <TableCell className="text-slate-600 text-sm">{row.target_date}</TableCell>
-                  <TableCell>
-                    {row.reason === 'lembur' ? (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">Lembur</span>
-                    ) : (
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-700">Ganti Off</span>
-                    )}
+              ) : actRows.map((row, idx) => (
+                <TableRow key={`${row.source}-${row.id}`} className="bg-white border-b border-slate-100 hover:bg-slate-50/50">
+                  <TableCell className="font-mono text-xs text-slate-400 py-3 pl-4">
+                    {(actPage - 1) * ACT_PAGE_SIZE + idx + 1}
                   </TableCell>
-                  <TableCell className="text-slate-600 text-sm">
-                    {row.reason === 'ganti_off' ? (row.replacing_user_name ?? '—') : (row.shift_name ?? '—')}
-                  </TableCell>
-                  <TableCell>
-                    <span className={`text-xs font-semibold px-2 py-0.5 rounded-full capitalize ${
-                      row.status === 'pending' ? 'bg-yellow-100 text-yellow-800' :
-                      row.status === 'active' ? 'bg-green-100 text-green-800' :
-                      'bg-slate-100 text-slate-600'
+                  <TableCell className="font-semibold text-slate-700 py-3">{row.user_name}</TableCell>
+                  <TableCell className="py-3">
+                    <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
+                      row.activity_type === 'Change Shift' ? 'bg-blue-100 text-blue-700' :
+                      row.activity_type === 'Off Day' ? 'bg-orange-100 text-orange-700' :
+                      row.activity_type === 'Lembur' ? 'bg-purple-100 text-purple-700' :
+                      'bg-amber-100 text-amber-700'
                     }`}>
-                      {row.status}
+                      {row.activity_type}
                     </span>
                   </TableCell>
-                  <TableCell className="text-center pr-4">
+                  <TableCell className="text-slate-500 py-3">{row.effective_date}</TableCell>
+                  <TableCell className="py-3">
+                    <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-500 text-white">
+                      Berjalan
+                    </span>
+                  </TableCell>
+                  <TableCell className="py-3 pr-4 text-center">
                     <div className="flex items-center justify-center gap-1">
-                      <button onClick={() => openEditEmergency(row)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-blue-500 hover:bg-blue-50 transition-all">
+                      <button
+                        onClick={() => openEditFromActivity(row)}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-blue-500 hover:bg-blue-50 transition-all"
+                      >
                         <Edit2 className="w-4 h-4" />
                       </button>
-                      <button onClick={() => setDeleteEmergencyId(row.id)}
-                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 transition-all">
+                      <button
+                        onClick={() => setDeleteActivityId({ id: row.id, source: row.source })}
+                        className="w-8 h-8 flex items-center justify-center rounded-lg text-red-500 hover:bg-red-50 transition-all"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -1638,143 +1458,152 @@ export default function ManagementEmployeePage() {
               ))}
             </TableBody>
           </Table>
+
+          {/* Pagination */}
+          {actTotalPages > 1 && (
+            <div className="flex items-center justify-between p-4 border-t border-slate-100">
+              <p className="text-xs text-slate-500">
+                Menampilkan {Math.min((actPage - 1) * ACT_PAGE_SIZE + 1, actTotal)} - {Math.min(actPage * ACT_PAGE_SIZE, actTotal)} dari {actTotal} entri
+              </p>
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setActPage(p => Math.max(1, p - 1))}
+                  disabled={actPage === 1}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all text-sm font-medium"
+                >
+                  &lt;
+                </button>
+                {Array.from({ length: actTotalPages }, (_, i) => i + 1).map(p => (
+                  <button
+                    key={p}
+                    onClick={() => setActPage(p)}
+                    className={`w-9 h-9 flex items-center justify-center rounded-xl border text-sm font-semibold transition-all ${
+                      p === actPage
+                        ? 'bg-blue-600 text-white border-blue-600'
+                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                    }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+                <button
+                  onClick={() => setActPage(p => Math.min(actTotalPages, p + 1))}
+                  disabled={actPage === actTotalPages}
+                  className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all text-sm font-medium"
+                >
+                  &gt;
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
-      <Card className="shadow-sm">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
-          <CardTitle className="text-base font-bold text-slate-800 flex items-center gap-2">
-            📜 Riwayat Perubahan Shift (3 data terakhir)
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <Table className="border-collapse w-full">
-            <TableHeader className="bg-[#F8FAFC]">
-              <TableRow className="hover:bg-transparent border-b border-slate-200">
-                <TableHead className="text-slate-600 font-semibold py-3 pl-4">Karyawan</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3">Shift Lama</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3">Shift Baru</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3">Tanggal Efektif</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3 pr-4">Status Shift</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {historyLoading ? (
-                Array.from({ length: 3 }).map((_, i) => (
-                  <TableRow key={i}>
-                    <TableCell className="pl-4"><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell className="pr-4"><Skeleton className="h-5 w-24" /></TableCell>
-                  </TableRow>
-                ))
-              ) : history.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-slate-400 pl-4">
-                    Belum ada perubahan shift hari ini
-                  </TableCell>
-                </TableRow>
-              ) : (
-                history.map(h => (
-                  <TableRow key={h.id} className="bg-white border-b border-slate-100 hover:bg-slate-50/50">
-                    <TableCell className="font-semibold text-slate-700 py-3 pl-4">{h.user_name}</TableCell>
-                    <TableCell className="text-slate-500 py-3">{h.old_shift}</TableCell>
-                    <TableCell className="text-slate-600 font-medium py-3">{h.new_shift}</TableCell>
-                    <TableCell className="text-slate-500 py-3">{h.effective_date}</TableCell>
-                    <TableCell className="py-3 pr-4">
-                      {h.is_double ? (
-                        <span className="px-2 py-1 text-xs font-semibold rounded-full bg-orange-100 text-orange-700">
-                          Double Shift
-                        </span>
-                      ) : (
-                        <span className="px-2 py-1 text-xs font-medium rounded-full bg-green-100 text-green-700">
-                          Single Shift
-                        </span>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+      {/* Confirm delete activity */}
+      <AnimatePresence>
+        {deleteActivityId && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+          >
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm"
+            >
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
+                  <Trash2 className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-800">Hapus Data Aktivitas</h3>
+                  <p className="text-sm text-slate-500">Data yang dihapus tidak dapat dikembalikan.</p>
+                </div>
+              </div>
+              <div className="flex gap-3 justify-end mt-4">
+                <button onClick={() => setDeleteActivityId(null)}
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all">
+                  Batal
+                </button>
+                <button
+                  onClick={() => deleteActivityMutation.mutate(deleteActivityId!)}
+                  disabled={deleteActivityMutation.isPending}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 transition-all"
+                >
+                  {deleteActivityMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Hapus
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* 4. TABEL ATTENDANCE (ABSENSI KARYAWAN - DI BAWAH RIWAYAT SHIFT) */}
       <Card className="shadow-sm">
         <CardHeader className="bg-slate-50/50 border-b border-slate-100 pb-4">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <CardTitle className="text-lg font-bold text-slate-800">📋 Tabel Absensi Karyawan</CardTitle>
-              <p className="text-xs text-slate-400 mt-0.5">Tinjau dan ekspor laporan kehadiran pegawai harian</p>
+              <CardTitle className="text-lg font-bold text-slate-800">{"\uD83D\uDCC5"} Tabel Absensi Karyawan</CardTitle>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={exportExcel} className="bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 h-9 font-medium">
-                <Download className="w-4 h-4 mr-1.5" /> Excel
-              </Button>
-              <Button variant="outline" size="sm" onClick={exportPDF} className="bg-red-50 text-red-600 border-red-200 hover:bg-red-100 hover:text-red-700 h-9 font-medium">
+              <Button variant="outline" size="sm" onClick={exportPDF} style={{ backgroundColor: '#DC143C', borderColor: '#DC143C' }} className="text-white hover:brightness-90 active:brightness-75 h-9 font-medium text-sm px-4 rounded-lg transition-all duration-150">
                 <Download className="w-4 h-4 mr-1.5" /> PDF
               </Button>
             </div>
           </div>
           
-          <div className="flex flex-col md:flex-row gap-3 mt-4">
-            <div className="flex flex-wrap sm:flex-nowrap gap-3 flex-1">
+          <div className="flex flex-wrap items-center gap-3 mt-4">
+            <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider shrink-0">Filter:</span>
+            <Input
+              type="date"
+              value={attFilterDate}
+              onChange={e => { setAttFilterDate(e.target.value); setAttPage(1) }}
+              className="w-[160px] bg-white h-9 shrink-0"
+            />
+            <Select value={attFilterShift} onValueChange={v => { setAttFilterShift(v as string); setAttPage(1) }}>
+              <SelectTrigger className="w-[160px] bg-white h-9 shrink-0">
+                <SelectValue>
+                  {attFilterShift === 'all' ? 'Semua Shift' : attFilterShift}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Shift</SelectItem>
+                {shifts.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <Select value={attFilterStatus} onValueChange={v => { setAttFilterStatus(v as string); setAttPage(1) }}>
+              <SelectTrigger className="w-[160px] bg-white h-9 shrink-0">
+                <SelectValue>
+                  {attFilterStatus === 'all' ? 'Semua Status' : (attFilterStatus.charAt(0).toUpperCase() + attFilterStatus.slice(1))}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">Semua Status</SelectItem>
+                <SelectItem value="hadir">Hadir</SelectItem>
+                <SelectItem value="izin">Izin</SelectItem>
+                <SelectItem value="sakit">Sakit</SelectItem>
+                <SelectItem value="alfa">Absen</SelectItem>
+                <SelectItem value="terlambat">Terlambat</SelectItem>
+                <SelectItem value="cuti">Cuti</SelectItem>
+              </SelectContent>
+            </Select>
+            <div className="relative shrink-0 w-[240px]">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
               <Input
-                type="date"
-                value={attFilterDate}
-                onChange={e => { setAttFilterDate(e.target.value); setAttPage(1) }}
-                className="w-full sm:w-[160px] bg-white h-9"
+                value={attSearch}
+                onChange={e => { setAttSearch(e.target.value); setAttPage(1) }}
+                placeholder="Cari nama karyawan..."
+                className="pl-9 bg-white w-full h-9 focus:border-blue-500 focus:ring-2 focus:ring-blue-500 focus:ring-offset-0"
               />
-              <Select value={attFilterShift} onValueChange={v => { setAttFilterShift(v as string); setAttPage(1) }}>
-                <SelectTrigger className="w-full sm:w-[160px] bg-white h-9">
-                  <SelectValue>
-                    {attFilterShift === 'all' ? 'Semua Shift' : attFilterShift}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Shift</SelectItem>
-                  {shifts.map(s => <SelectItem key={s.id} value={s.name}>{s.name}</SelectItem>)}
-                </SelectContent>
-              </Select>
-              <Select value={attFilterStatus} onValueChange={v => { setAttFilterStatus(v as string); setAttPage(1) }}>
-                <SelectTrigger className="w-full sm:w-[160px] bg-white h-9">
-                  <SelectValue>
-                    {attFilterStatus === 'all' ? 'Semua Status' : (attFilterStatus.charAt(0).toUpperCase() + attFilterStatus.slice(1))}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Semua Status</SelectItem>
-                  <SelectItem value="hadir">Hadir</SelectItem>
-                  <SelectItem value="izin">Izin</SelectItem>
-                  <SelectItem value="sakit">Sakit</SelectItem>
-                  <SelectItem value="alfa">Alfa</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
-            
-            <div className="flex gap-2 w-full md:w-auto">
-              <div className="relative flex-1 md:w-[240px]">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                <Input
-                  value={attSearch}
-                  onChange={e => { setAttSearch(e.target.value); setAttPage(1) }}
-                  placeholder="Cari nama karyawan..."
-                  className="pl-9 bg-white w-full h-9"
-                />
-              </div>
-              {(attFilterDate !== todayStr || attFilterStatus !== 'all' || attFilterShift !== 'all' || attSearch) && (
-                <Button
-                  variant="ghost"
-                  onClick={() => { setAttFilterDate(todayStr); setAttFilterShift('all'); setAttFilterStatus('all'); setAttSearch(''); setAttPage(1) }}
-                  className="px-3 h-9"
-                  title="Reset Filter"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              )}
-            </div>
+            {(attFilterDate !== todayStr || attFilterStatus !== 'all' || attFilterShift !== 'all' || attSearch) && (
+              <Button
+                variant="ghost"
+                onClick={() => { setAttFilterDate(todayStr); setAttFilterShift('all'); setAttFilterStatus('all'); setAttSearch(''); setAttPage(1) }}
+                className="px-3 h-9 shrink-0"
+                title="Reset Filter"
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            )}
           </div>
         </CardHeader>
         <CardContent className="p-0">
@@ -1825,12 +1654,7 @@ export default function ManagementEmployeePage() {
                           const start = formatTime(r.break_start)
                           if (!r.break_end) return `${start} - --:--`
                           const end = formatTime(r.break_end)
-                          const dur = calculateBreakDuration(r.break_start, r.break_end)
-                          return (
-                            <span className={dur.isWarning ? "text-red-600 font-semibold" : "text-slate-500"}>
-                              {start} - {end}
-                            </span>
-                          )
+                          return `${start} - ${end}`
                         })()}
                       </TableCell>
                       <TableCell className="text-slate-500 text-center">{r.check_out ? formatTime(r.check_out) : '—'}</TableCell>
@@ -1857,12 +1681,6 @@ export default function ManagementEmployeePage() {
                       </TableCell>
                       <TableCell className="text-center">
                         {(() => {
-                          const shiftLabel = r.shift_type === 'double' ? 'Double Shift' : r.shift_name !== '—' ? 'Single Shift' : 'Tidak Ada'
-                          const shiftColor = r.shift_type === 'double'
-                            ? { bg: '#FED7AA', text: '#9A3412' }
-                            : r.shift_name !== '—'
-                            ? { bg: '#DCFCE7', text: '#166534' }
-                            : { bg: '#F3F4F6', text: '#374151' }
                           const statusColor = r.status === 'hadir'
                             ? { bg: '#DCFCE7', text: '#166534' }
                             : r.status === 'terlambat'
@@ -1873,18 +1691,14 @@ export default function ManagementEmployeePage() {
                             ? { bg: '#DBEAFE', text: '#1E40AF' }
                             : r.status === 'izin'
                             ? { bg: '#EDE9FE', text: '#5B21B6' }
+                            : r.status === 'cuti'
+                            ? { bg: '#FCE7F3', text: '#9D174D' }
                             : { bg: '#F3F4F6', text: '#374151' }
                           const statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1)
                           return (
-                            <div className="flex items-center justify-center gap-1 flex-wrap">
-                              <span style={{ background: shiftColor.bg, color: shiftColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                {shiftLabel}
-                              </span>
-                              <span className="text-slate-300 text-xs">/</span>
-                              <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                {statusLabel}
-                              </span>
-                            </div>
+                            <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              {statusLabel}
+                            </span>
                           )
                         })()}
                       </TableCell>
@@ -1953,6 +1767,388 @@ export default function ManagementEmployeePage() {
         </CardContent>
       </Card>
 
+      {/* MODAL PERUBAHAN JADWAL */}
+      <AnimatePresence>
+        {showJadwalModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6 px-4"
+            onClick={e => { if (e.target === e.currentTarget) { setShowJadwalModal(false); setJadwalMenu('') } }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Perubahan Jadwal</h2>
+                </div>
+                <button
+                  onClick={() => { setShowJadwalModal(false); setJadwalMenu('') }}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Dropdown pilihan menu */}
+              <div className="px-6 pt-4 pb-2">
+                <label className="block text-sm font-semibold text-slate-700 mb-2">Jenis Perubahan</label>
+                <select
+                  value={jadwalMenu}
+                  onChange={e => setJadwalMenu(e.target.value as typeof jadwalMenu)}
+                  className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800 bg-white text-slate-800"
+                >
+                  <option value="">-- Pilih Jenis Perubahan --</option>
+                  <option value="change_shift">Change Shift</option>
+                  <option value="atur_off">Off Day</option>
+                  <option value="lembur">Lembur</option>
+                  <option value="ganti_off">Ganti Off</option>
+                </select>
+              </div>
+
+              {/* Konten berdasarkan pilihan */}
+              <div className="px-6 pb-6 pt-2">
+
+                {/* ── CHANGE SHIFT ── */}
+                {jadwalMenu === 'change_shift' && (
+                  <div className="mt-4">
+                    <form onSubmit={handleUpdateShift} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan <span className="text-red-500">*</span></label>
+                          <select
+                            value={shiftForm.userId}
+                            onChange={e => setShiftForm(f => ({ ...f, userId: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          >
+                            <option value="" disabled>Pilih Karyawan</option>
+                            {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
+                              <option key={u.id} value={u.id}>{u.name} ({u.nip !== '—' ? u.nip : u.role})</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal Efektif <span className="text-red-500">*</span></label>
+                          <input
+                            type="date"
+                            value={shiftForm.effectiveDate}
+                            onChange={e => setShiftForm(f => ({ ...f, effectiveDate: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Shift Baru <span className="text-red-500">*</span></label>
+                          <select
+                            value={shiftForm.shiftId}
+                            onChange={e => setShiftForm(f => ({ ...f, shiftId: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          >
+                            <option value="" disabled>Pilih Shift Baru</option>
+                            {shifts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                            {shiftForm.shiftType === 'single' && <option value="none">Tanpa Shift</option>}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Keterangan</label>
+                          <input
+                            type="text"
+                            placeholder="Alasan lembur / perubahan shift..."
+                            value={shiftForm.keterangan}
+                            onChange={e => setShiftForm(f => ({ ...f, keterangan: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={updateShiftMutation.isPending || assignOvertimeMutation.isPending}
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        {(updateShiftMutation.isPending || assignOvertimeMutation.isPending) && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Simpan Perubahan
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* ── ATUR HARI OFF ── */}
+                {jadwalMenu === 'atur_off' && (
+                  <div className="mt-4 space-y-4">
+                    <form onSubmit={handleSetOff} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan *</label>
+                          <select
+                            value={offForm.userId}
+                            onChange={e => setOffForm(f => ({ ...f, userId: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          >
+                            <option value="">-- Pilih Karyawan --</option>
+                            {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal Off *</label>
+                          <input
+                            type="date"
+                            value={offForm.offDate}
+                            onChange={e => setOffForm(f => ({ ...f, offDate: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          />
+                        </div>
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={savingOff}
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        {savingOff && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Simpan Perubahan
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* ── LEMBUR ── */}
+                {jadwalMenu === 'lembur' && (
+                  <div className="mt-4 space-y-4">
+                    <form onSubmit={e => {
+                      e.preventDefault()
+                      const payload = { ...emergencyForm, reason: 'lembur' as const }
+                      if (!payload.assigned_user_id || !payload.target_date) { toast.error('Karyawan dan tanggal wajib diisi!'); return }
+                      saveEmergencyMutation.mutate({ ...payload, id: editEmergencyRow?.id })
+                    }} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan Ditugaskan *</label>
+                          <select
+                            value={emergencyForm.assigned_user_id}
+                            onChange={e => setEmergencyForm(f => ({ ...f, assigned_user_id: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          >
+                            <option value="">-- Pilih Karyawan --</option>
+                            {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal *</label>
+                          <input
+                            type="date"
+                            value={emergencyForm.target_date}
+                            onChange={e => setEmergencyForm(f => ({ ...f, target_date: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Shift Lembur</label>
+                        <select
+                          value={emergencyForm.shift_id}
+                          onChange={e => setEmergencyForm(f => ({ ...f, shift_id: e.target.value }))}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                        >
+                          <option value="">-- Pilih Shift --</option>
+                          {shifts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                        </select>
+                      </div>
+                      <button
+                          type="submit"
+                          disabled={saveEmergencyMutation.isPending}
+                          className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                        >
+                          {saveEmergencyMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                          Simpan Perubahan
+                        </button>
+                    </form>
+                  </div>
+                )}
+
+                {/* ── GANTI OFF ── */}
+                {jadwalMenu === 'ganti_off' && (
+                  <div className="mt-4 space-y-4">
+                    <form onSubmit={e => {
+                      e.preventDefault()
+                      const payload = { ...emergencyForm, reason: 'ganti_off' as const }
+                      if (!payload.assigned_user_id || !payload.target_date) { toast.error('Karyawan dan tanggal wajib diisi!'); return }
+                      if (!payload.replacing_user_id) { toast.error('Karyawan yang digantikan wajib diisi!'); return }
+                      saveEmergencyMutation.mutate({ ...payload, id: editEmergencyRow?.id })
+                    }} className="space-y-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Karyawan Ditugaskan *</label>
+                          <select
+                            value={emergencyForm.assigned_user_id}
+                            onChange={e => setEmergencyForm(f => ({ ...f, assigned_user_id: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          >
+                            <option value="">-- Pilih Karyawan --</option>
+                            {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-sm font-semibold text-slate-700 mb-1">Tanggal *</label>
+                          <input
+                            type="date"
+                            value={emergencyForm.target_date}
+                            onChange={e => {
+                              setEmergencyForm(f => ({ ...f, target_date: e.target.value, replacing_user_id: '' }))
+                              loadOffUsersOnDate(e.target.value)
+                            }}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          />
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Karyawan Digantikan *
+                          <span className="text-xs font-normal text-slate-400 ml-1">(hanya yang off pada tanggal tersebut)</span>
+                        </label>
+                        {loadingOffUsers ? (
+                          <div className="text-sm text-slate-400 py-2">Memuat karyawan yang off...</div>
+                        ) : offUsersOnDate.length === 0 ? (
+                          <div className="text-sm text-amber-600 bg-amber-50 px-3 py-2 rounded-lg border border-amber-100">
+                            Tidak ada karyawan yang off pada tanggal ini. Set hari off terlebih dahulu.
+                          </div>
+                        ) : (
+                          <select
+                            value={emergencyForm.replacing_user_id}
+                            onChange={e => setEmergencyForm(f => ({ ...f, replacing_user_id: e.target.value }))}
+                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                          >
+                            <option value="">-- Pilih Karyawan --</option>
+                            {offUsersOnDate.filter(u => u.id !== emergencyForm.assigned_user_id).map(u => (
+                              <option key={u.id} value={u.id}>{u.name}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      <button
+                        type="submit"
+                        disabled={saveEmergencyMutation.isPending}
+                        className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-slate-800 hover:bg-slate-900 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                      >
+                        {saveEmergencyMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
+                        Simpan Perubahan
+                      </button>
+                    </form>
+                  </div>
+                )}
+
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* MODAL ATUR RADIUS LOKASI ABSENSI */}
+      <AnimatePresence>
+        {showRadiusModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+            onClick={e => { if (e.target === e.currentTarget) setShowRadiusModal(false) }}
+          >
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.95, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-white rounded-2xl shadow-2xl w-full max-w-lg"
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-800">Atur Radius Lokasi Absensi</h2>
+                </div>
+                <button
+                  onClick={() => setShowRadiusModal(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Current config display */}
+              {companyConfig && (
+                <div className="mx-6 mt-4 px-4 py-3 bg-slate-50 rounded-lg border border-slate-200 text-xs text-slate-600 flex flex-wrap gap-x-6 gap-y-1">
+                  <span>📍 Lat: <strong>{companyConfig.office_lat}</strong></span>
+                  <span>📍 Lng: <strong>{companyConfig.office_lng}</strong></span>
+                  <span>📏 Radius: <strong>{companyConfig.radius} meter</strong></span>
+                </div>
+              )}
+
+              {/* Form */}
+              <form onSubmit={handleSaveRadius} className="px-6 py-4 space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Latitude <span className="text-red-500">*</span></label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="cth: 3.5952"
+                      value={radiusForm.officeLat}
+                      onChange={e => setRadiusForm(f => ({ ...f, officeLat: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-slate-700 mb-1">Longitude <span className="text-red-500">*</span></label>
+                    <input
+                      type="number"
+                      step="any"
+                      placeholder="cth: 98.6722"
+                      value={radiusForm.officeLng}
+                      onChange={e => setRadiusForm(f => ({ ...f, officeLng: e.target.value }))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      required
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Radius (meter) <span className="text-red-500">*</span></label>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder="cth: 100 (= 100 meter), 1000 (= 1 km)"
+                    value={radiusForm.radius}
+                    onChange={e => setRadiusForm(f => ({ ...f, radius: e.target.value }))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                  {radiusForm.radius && !isNaN(parseInt(radiusForm.radius)) && (
+                    <p className="text-xs text-slate-400 mt-1">= {(parseInt(radiusForm.radius) / 1000).toFixed(2)} km</p>
+                  )}
+                </div>
+                <button
+                  type="submit"
+                  disabled={savingRadius}
+                  className="w-full py-2.5 rounded-lg text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 transition-all flex items-center justify-center gap-2"
+                >
+                  {savingRadius && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Simpan Konfigurasi
+                </button>
+              </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* A. TAMBAH KARYAWAN BARU (MODAL DI TENGAH LAYAR) */}
       <AnimatePresence>
         {showAddModal && (
@@ -1998,7 +2194,7 @@ export default function ManagementEmployeePage() {
                 </button>
               </div>
 
-              <form onSubmit={handleAddUser}>
+              <form onSubmit={handleAddUser} noValidate>
                 {/* Baris 1: Nama Lengkap + Email */}
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
                   <div>
@@ -2006,7 +2202,6 @@ export default function ManagementEmployeePage() {
                       Nama Lengkap <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
-                      required
                       type="text"
                       value={addUserForm.name}
                       onChange={e => setAddUserForm(f => ({ ...f, name: e.target.value }))}
@@ -2021,7 +2216,6 @@ export default function ManagementEmployeePage() {
                       Email <span style={{ color: '#EF4444' }}>*</span>
                     </label>
                     <input
-                      required
                       type="email"
                       value={addUserForm.email}
                       onChange={e => setAddUserForm(f => ({ ...f, email: e.target.value }))}
@@ -2040,16 +2234,29 @@ export default function ManagementEmployeePage() {
                       Password <span style={{ color: '#EF4444' }}>*</span>
                       <span style={{ fontWeight: '400', color: '#94A3B8', marginLeft: '4px' }}>(Min. 6 karakter)</span>
                     </label>
-                    <input
-                      required
-                      type="password"
-                      value={addUserForm.password}
-                      onChange={e => setAddUserForm(f => ({ ...f, password: e.target.value }))}
-                      placeholder="••••••••"
-                      style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
-                      onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
-                      onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
-                    />
+                    <div style={{ position: 'relative' }}>
+                      <input
+                        required
+                        type={showAddPassword ? 'text' : 'password'}
+                        value={addUserForm.password}
+                        onChange={e => setAddUserForm(f => ({ ...f, password: e.target.value }))}
+                        placeholder="••••••••"
+                        style={{ width: '100%', padding: '10px 40px 10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none', boxSizing: 'border-box' }}
+                        onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                        onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowAddPassword(v => !v)}
+                        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: '#94A3B8', padding: 0 }}
+                      >
+                        {showAddPassword ? (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                        ) : (
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                        )}
+                      </button>
+                    </div>
                   </div>
                   <div>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
@@ -2217,7 +2424,7 @@ export default function ManagementEmployeePage() {
                     required
                     value={editForm.name}
                     onChange={e => setEditForm(f => ({ ...f, name: e.target.value }))}
-                    className="h-10 border-slate-200"
+                    className="h-10 border-slate-200 focus:!ring-2 focus:!ring-blue-500 focus:!border-blue-500"
                   />
                 </div>
 
@@ -2237,8 +2444,34 @@ export default function ManagementEmployeePage() {
                     maxLength={6}
                     value={editForm.nip}
                     onChange={e => setEditForm(f => ({ ...f, nip: e.target.value }))}
-                    className="h-10 border-slate-200"
+                    className="h-10 border-slate-200 focus:!ring-2 focus:!ring-blue-500 focus:!border-blue-500"
                   />
+                </div>
+
+                <div className="flex flex-col">
+                  <label className="text-sm font-medium text-slate-600 mb-1">
+                    Password Baru <span className="text-slate-400 font-normal">(kosongkan jika tidak diubah)</span>
+                  </label>
+                  <div className="relative">
+                    <Input
+                      type={showEditPassword ? 'text' : 'password'}
+                      placeholder="Min. 6 karakter"
+                      value={editForm.password}
+                      onChange={e => setEditForm(f => ({ ...f, password: e.target.value }))}
+                      className="h-10 border-slate-200 pr-10 focus:!ring-2 focus:!ring-blue-500 focus:!border-blue-500"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowEditPassword(v => !v)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    >
+                      {showEditPassword ? (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.88 9.88l-3.29-3.29m7.532 7.532l3.29 3.29M3 3l3.59 3.59m0 0A9.953 9.953 0 0112 5c4.478 0 8.268 2.943 9.543 7a10.025 10.025 0 01-4.132 5.411m0 0L21 21" /></svg>
+                      ) : (
+                        <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
+                      )}
+                    </button>
+                  </div>
                 </div>
 
                 <div className="flex flex-col">
@@ -2411,19 +2644,10 @@ export default function ManagementEmployeePage() {
                   <span className="text-slate-500">Jam Pulang</span>
                   <span className="font-medium text-slate-800">{selectedAtt.check_out ? formatTime(selectedAtt.check_out) : '--:--'}</span>
                   
-                  <span className="text-slate-500">Shift</span>
-                  <div>
-                    {(() => {
-                      const shiftLabel = selectedAtt.shift_type === 'double' ? 'Double Shift' : selectedAtt.shift_name !== '—' ? 'Single Shift' : 'Tidak Ada'
-                      const shiftColor = selectedAtt.shift_type === 'double' ? { bg: '#FED7AA', text: '#9A3412' } : selectedAtt.shift_name !== '—' ? { bg: '#DCFCE7', text: '#166534' } : { bg: '#F3F4F6', text: '#374151' }
-                      return <span style={{ background: shiftColor.bg, color: shiftColor.text, padding: '2px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600 }}>{shiftLabel}</span>
-                    })()}
-                  </div>
-
                   <span className="text-slate-500">Status</span>
                   <div className="flex items-center gap-2">
                     {(() => {
-                      const statusColor = selectedAtt.status === 'hadir' ? { bg: '#DCFCE7', text: '#166534' } : selectedAtt.status === 'terlambat' ? { bg: '#FEF9C3', text: '#854D0E' } : selectedAtt.status === 'absen' || selectedAtt.status === 'alfa' ? { bg: '#FEE2E2', text: '#991B1B' } : selectedAtt.status === 'sakit' ? { bg: '#DBEAFE', text: '#1E40AF' } : selectedAtt.status === 'izin' ? { bg: '#EDE9FE', text: '#5B21B6' } : { bg: '#F3F4F6', text: '#374151' }
+                      const statusColor = selectedAtt.status === 'hadir' ? { bg: '#DCFCE7', text: '#166534' } : selectedAtt.status === 'terlambat' ? { bg: '#FEF9C3', text: '#854D0E' } : selectedAtt.status === 'absen' || selectedAtt.status === 'alfa' ? { bg: '#FEE2E2', text: '#991B1B' } : selectedAtt.status === 'sakit' ? { bg: '#DBEAFE', text: '#1E40AF' } : selectedAtt.status === 'izin' ? { bg: '#EDE9FE', text: '#5B21B6' } : selectedAtt.status === 'cuti' ? { bg: '#FCE7F3', text: '#9D174D' } : { bg: '#F3F4F6', text: '#374151' }
                       return <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 10px', borderRadius: '9999px', fontSize: '12px', fontWeight: 600 }}>{selectedAtt.status.charAt(0).toUpperCase() + selectedAtt.status.slice(1)}</span>
                     })()}
                   </div>
@@ -2514,13 +2738,48 @@ export default function ManagementEmployeePage() {
                   }
                   const toTsSameDay = (date: string, time: string) => time ? `${date}T${time}:00` : null
 
+                  // ─── Auto-recalculate status from check_in vs shift start_time ───
+                  // Only auto-recalculate if check_in is provided and status is hadir/terlambat
+                  // (leave izin/sakit/alfa/cuti unchanged — admin set those intentionally)
+                  let finalStatus = editAttForm.status
+                  if (editAttForm.check_in && (editAttForm.status === 'hadir' || editAttForm.status === 'terlambat')) {
+                    const matchedShift = shifts.find((s: any) => s.name === editingAtt.shift_name)
+                    if (matchedShift?.start_time) {
+                      const [sh, sm] = matchedShift.start_time.split(':').map(Number)
+                      const shiftStartMin = sh * 60 + sm
+                      const [ch, cm] = editAttForm.check_in.split(':').map(Number)
+                      const checkInMin = ch * 60 + cm
+                      finalStatus = checkInMin <= shiftStartMin + 30 ? 'hadir' : 'terlambat'
+                    }
+                  }
+
+                  // ─── Recalculate lateness_count if status changed ────────────────
+                  const oldStatus = editingAtt.status
+                  const wasLate = oldStatus === 'terlambat'
+                  const isNowLate = finalStatus === 'terlambat'
+                  if (wasLate !== isNowLate) {
+                    const { data: userData } = await supabase
+                      .from('users')
+                      .select('lateness_count')
+                      .eq('id', editingAtt.user_id)
+                      .maybeSingle()
+                    const currentCount = userData?.lateness_count ?? 0
+                    const newCount = isNowLate
+                      ? currentCount + 1
+                      : Math.max(0, currentCount - 1)
+                    await supabase
+                      .from('users')
+                      .update({ lateness_count: newCount })
+                      .eq('id', editingAtt.user_id)
+                  }
+
                   // 1. Update attendance table
                   const { error } = await supabase.from('attendance').update({
                     check_in_time: toTsSameDay(editingAtt.date, editAttForm.check_in),
                     check_out_time: toTs(editingAtt.date, editAttForm.check_out),
                     break_start: toTs(editingAtt.date, editAttForm.break_start),
                     break_end: toTs(editingAtt.date, editAttForm.break_end),
-                    status: editAttForm.status,
+                    status: finalStatus,
                     note: editAttForm.notes || null,
                   }).eq('id', editingAtt.id)
                   if (error) throw error
@@ -2592,14 +2851,37 @@ export default function ManagementEmployeePage() {
 
                 {/* Status Kehadiran */}
                 <div style={{ marginTop: '16px' }}>
-                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Status Kehadiran <span style={{ color: '#EF4444' }}>*</span></label>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>
+                    Status Kehadiran <span style={{ color: '#EF4444' }}>*</span>
+                    {(() => {
+                      // Show auto-calculated status hint if check_in & shift has start_time
+                      if (!editAttForm.check_in) return null
+                      if (editAttForm.status !== 'hadir' && editAttForm.status !== 'terlambat') return null
+                      const matchedShift = shifts.find((s: any) => s.name === editingAtt.shift_name)
+                      if (!matchedShift?.start_time) return null
+                      const [sh, sm] = matchedShift.start_time.split(':').map(Number)
+                      const [ch, cm] = editAttForm.check_in.split(':').map(Number)
+                      const autoStatus = (ch * 60 + cm) <= (sh * 60 + sm + 30) ? 'hadir' : 'terlambat'
+                      return (
+                        <span style={{ marginLeft: '8px', fontSize: '11px', fontWeight: '600', padding: '2px 7px', borderRadius: '9999px', background: autoStatus === 'hadir' ? '#DCFCE7' : '#FEF9C3', color: autoStatus === 'hadir' ? '#166534' : '#854D0E' }}>
+                          Auto: {autoStatus === 'hadir' ? 'Hadir' : 'Terlambat'}
+                        </span>
+                      )
+                    })()}
+                  </label>
                   <select value={editAttForm.status} onChange={e => setEditAttForm(f => ({ ...f, status: e.target.value }))} style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none' }} onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }} onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}>
                     <option value="hadir">Hadir</option>
                     <option value="terlambat">Terlambat</option>
                     <option value="sakit">Sakit</option>
                     <option value="izin">Izin</option>
                     <option value="absen">Absen</option>
+                    <option value="cuti">Cuti</option>
                   </select>
+                  {editAttForm.check_in && (editAttForm.status === 'hadir' || editAttForm.status === 'terlambat') && shifts.find((s: any) => s.name === editingAtt.shift_name)?.start_time && (
+                    <p style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
+                      Status akan dihitung otomatis dari jam masuk vs jam mulai shift (toleransi 30 menit).
+                    </p>
+                  )}
                 </div>
 
                 {/* Catatan */}
