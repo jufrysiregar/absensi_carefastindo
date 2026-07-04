@@ -1629,20 +1629,18 @@ export default function ManagementEmployeePage() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="h-8 px-2.5 text-blue-600 border-blue-200 hover:bg-blue-50"
+                              className="h-8 w-8 p-0 text-blue-600 border-blue-200 hover:bg-blue-50"
                               onClick={() => openEditModal(u)}
                             >
-                              <Edit2 className="w-3.5 h-3.5 mr-1" />
-                              Edit
+                              <Edit2 className="w-3.5 h-3.5" />
                             </Button>
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              className="h-8 px-2.5 text-red-600 border-red-200 hover:bg-red-50"
+                              className="h-8 w-8 p-0 text-red-600 border-red-200 hover:bg-red-50"
                               onClick={() => setDeletingUserId(u.id)}
                             >
-                              <Trash2 className="w-3.5 h-3.5 mr-1" />
-                              Hapus
+                              <Trash2 className="w-3.5 h-3.5" />
                             </Button>
                           </div>
                         )}

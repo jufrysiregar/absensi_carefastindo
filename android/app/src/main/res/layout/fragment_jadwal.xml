@@ -6,12 +6,15 @@
     android:orientation="vertical"
     android:background="@color/bg_light">
 
-    <!-- Header Bulan Navigator -->
+    <!-- Header: Dropdown Bulan & Tahun -->
     <androidx.cardview.widget.CardView
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_margin="16dp"
-        app:cardCornerRadius="16dp"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginTop="12dp"
+        android:layout_marginBottom="8dp"
+        app:cardCornerRadius="14dp"
         app:cardElevation="4dp"
         app:cardBackgroundColor="@color/white">
 
@@ -21,64 +24,90 @@
             android:orientation="vertical"
             android:padding="16dp">
 
-            <!-- Navigasi Bulan -->
-            <RelativeLayout
+            <!-- Baris spinner -->
+            <LinearLayout
                 android:layout_width="match_parent"
-                android:layout_height="wrap_content">
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:gravity="center_vertical"
+                android:weightSum="2">
 
-                <ImageButton
-                    android:id="@+id/btnPrevMonth"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@android:drawable/ic_media_previous"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:layout_alignParentStart="true"
-                    android:layout_centerVertical="true"
-                    android:contentDescription="Bulan sebelumnya" />
-
+                <!-- Spinner Bulan -->
                 <LinearLayout
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_weight="1.3"
                     android:orientation="vertical"
-                    android:layout_centerInParent="true"
-                    android:gravity="center">
+                    android:layout_marginEnd="8dp">
 
                     <TextView
-                        android:id="@+id/txtMonthYear"
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Juli 2026"
-                        android:textSize="18sp"
+                        android:text="BULAN"
+                        android:textSize="10sp"
+                        android:textColor="@color/text_secondary_light"
                         android:textStyle="bold"
-                        android:textColor="@color/text_primary_light"
-                        android:gravity="center" />
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="4dp" />
 
-                    <TextView
-                        android:id="@+id/txtShiftInfo"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:text="Shift Pagi · 07:00 – 15:00"
-                        android:textSize="12sp"
-                        android:textColor="@color/primary"
-                        android:gravity="center"
-                        android:layout_marginTop="2dp" />
+                    <Spinner
+                        android:id="@+id/spinMonth"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_spinner"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="8dp" />
                 </LinearLayout>
 
-                <ImageButton
-                    android:id="@+id/btnNextMonth"
-                    android:layout_width="40dp"
-                    android:layout_height="40dp"
-                    android:src="@android:drawable/ic_media_next"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:layout_alignParentEnd="true"
-                    android:layout_centerVertical="true"
-                    android:contentDescription="Bulan berikutnya" />
-            </RelativeLayout>
+                <!-- Spinner Tahun -->
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="0.7"
+                    android:orientation="vertical">
 
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="TAHUN"
+                        android:textSize="10sp"
+                        android:textColor="@color/text_secondary_light"
+                        android:textStyle="bold"
+                        android:letterSpacing="0.1"
+                        android:layout_marginBottom="4dp" />
+
+                    <Spinner
+                        android:id="@+id/spinYear"
+                        android:layout_width="match_parent"
+                        android:layout_height="44dp"
+                        android:background="@drawable/bg_spinner"
+                        android:paddingStart="12dp"
+                        android:paddingEnd="8dp" />
+                </LinearLayout>
+            </LinearLayout>
+
+            <!-- Info shift aktif -->
+            <TextView
+                android:id="@+id/txtShiftInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text=""
+                android:textSize="12sp"
+                android:textColor="@color/primary"
+                android:layout_marginTop="10dp" />
         </LinearLayout>
     </androidx.cardview.widget.CardView>
 
-    <!-- Empty / Loading / Belum ditentukan state -->
+    <!-- Loading -->
+    <ProgressBar
+        android:id="@+id/progressJadwal"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="32dp"
+        android:visibility="gone" />
+
+    <!-- Empty state -->
     <TextView
         android:id="@+id/txtEmptyJadwal"
         android:layout_width="match_parent"
@@ -91,16 +120,7 @@
         android:padding="32dp"
         android:visibility="gone" />
 
-    <!-- Loading -->
-    <ProgressBar
-        android:id="@+id/progressJadwal"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center"
-        android:layout_weight="0"
-        android:visibility="gone" />
-
-    <!-- RecyclerView daftar hari -->
+    <!-- Daftar hari -->
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/rvJadwal"
         android:layout_width="match_parent"

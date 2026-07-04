@@ -4,8 +4,10 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageButton
+import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import androidx.cardview.widget.CardView
 import androidx.core.content.ContextCompat
@@ -18,6 +20,7 @@ import com.carefastindo.absensi.data.model.Attendance
 import com.carefastindo.absensi.data.model.EmergencyAssignment
 import com.carefastindo.absensi.data.model.OffSchedule
 import com.carefastindo.absensi.data.model.OvertimeAssignment
+import com.carefastindo.absensi.data.model.Shift
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.utils.ShiftHelper
 import io.github.jan.supabase.postgrest.from
@@ -29,58 +32,48 @@ import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
 
-/**
- * JadwalFragment - Menampilkan jadwal bulanan karyawan beserta rekam kehadiran.
- *
- * Logika:
- * - Tampilkan tanggal 1 s/d akhir bulan
- * - Setiap hari memiliki:
- *   - Informasi shift (dari user_shifts) atau shift default karyawan
- *   - Status off (dari off_schedules)
- *   - Status lembur (dari emergency_assignments dan overtime_assignments)
- *   - Data absensi aktual (dari attendance) untuk hari yang sudah lewat / hari ini
- *   - Hari depan: hanya tampil info jadwal saja (tanpa detail absensi)
- * - Jika karyawan tidak memiliki jadwal sama sekali di bulan itu → "Jadwal bulan ini belum ditentukan."
- */
 class JadwalFragment : Fragment() {
 
-    // ── UI refs ────────────────────────────────────────────────
-    private lateinit var btnPrevMonth: ImageButton
-    private lateinit var btnNextMonth: ImageButton
-    private lateinit var txtMonthYear: TextView
+    // ── UI ──────────────────────────────────────────────────────
+    private lateinit var spinMonth: Spinner
+    private lateinit var spinYear: Spinner
     private lateinit var txtShiftInfo: TextView
-    private lateinit var txtEmptyJadwal: TextView
     private lateinit var progressJadwal: ProgressBar
+    private lateinit var txtEmptyJadwal: TextView
     private lateinit var rvJadwal: RecyclerView
 
-    // ── State ──────────────────────────────────────────────────
-    private var currentYear = Calendar.getInstance().get(Calendar.YEAR)
-    private var currentMonth = Calendar.getInstance().get(Calendar.MONTH) // 0-indexed
+    // ── State ───────────────────────────────────────────────────
+    private var selectedYear = Calendar.getInstance().get(Calendar.YEAR)
+    private var selectedMonth = Calendar.getInstance().get(Calendar.MONTH) // 0-indexed
+    private var isSpinnerReady = false
 
-    // ── Data ───────────────────────────────────────────────────
+    // ── Locale ──────────────────────────────────────────────────
+    private val idLocale = Locale("id", "ID")
+    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val dayShortFmt = SimpleDateFormat("EEE", idLocale)
+
+    private val monthNames = arrayOf(
+        "Januari", "Februari", "Maret", "April", "Mei", "Juni",
+        "Juli", "Agustus", "September", "Oktober", "November", "Desember"
+    )
+
+    // ── Data ────────────────────────────────────────────────────
     data class DayItem(
-        val dateStr: String,             // yyyy-MM-dd
-        val dayName: String,             // "Sen", "Sel" …
-        val dayNumber: Int,              // 1..31
-        val shiftLabel: String,          // "Shift Pagi · 07:00 – 15:00" / "Off" / "-"
+        val dateStr: String,
+        val dayName: String,
+        val dayNumber: Int,
+        val shift: Shift?,            // null = tidak ada jadwal / off
         val isOff: Boolean,
-        val isFuture: Boolean,           // hari sesudah hari ini
+        val isFuture: Boolean,
         val isToday: Boolean,
-        val attendance: Attendance?,     // null jika belum ada / future
-        val lemburInfo: String?,         // "⚡ Lembur · 15:00 – 18:00" jika ada
-        val hasSchedule: Boolean         // apakah ada data shift di bulan ini
+        val attendance: Attendance?,
+        val lemburInfo: String?
     )
 
     private val days = mutableListOf<DayItem>()
     private lateinit var adapter: JadwalAdapter
 
-    // ── Locale ─────────────────────────────────────────────────
-    private val idLocale = Locale("id", "ID")
-    private val dayShortFmt = SimpleDateFormat("EEE", idLocale)
-    private val monthYearFmt = SimpleDateFormat("MMMM yyyy", idLocale)
-    private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
-
-    // ── Fragment lifecycle ─────────────────────────────────────
+    // ── Lifecycle ────────────────────────────────────────────────
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -88,22 +81,20 @@ class JadwalFragment : Fragment() {
     ): View? {
         val view = inflater.inflate(R.layout.fragment_jadwal, container, false)
 
-        btnPrevMonth    = view.findViewById(R.id.btnPrevMonth)
-        btnNextMonth    = view.findViewById(R.id.btnNextMonth)
-        txtMonthYear    = view.findViewById(R.id.txtMonthYear)
-        txtShiftInfo    = view.findViewById(R.id.txtShiftInfo)
-        txtEmptyJadwal  = view.findViewById(R.id.txtEmptyJadwal)
-        progressJadwal  = view.findViewById(R.id.progressJadwal)
-        rvJadwal        = view.findViewById(R.id.rvJadwal)
+        spinMonth    = view.findViewById(R.id.spinMonth)
+        spinYear     = view.findViewById(R.id.spinYear)
+        txtShiftInfo = view.findViewById(R.id.txtShiftInfo)
+        progressJadwal = view.findViewById(R.id.progressJadwal)
+        txtEmptyJadwal = view.findViewById(R.id.txtEmptyJadwal)
+        rvJadwal     = view.findViewById(R.id.rvJadwal)
 
         setupRecycler()
-        setupNavButtons()
-        loadJadwal()
+        setupSpinners()
 
         return view
     }
 
-    // ── Setup ──────────────────────────────────────────────────
+    // ── Setup ────────────────────────────────────────────────────
 
     private fun setupRecycler() {
         rvJadwal.layoutManager = LinearLayoutManager(requireContext())
@@ -111,37 +102,57 @@ class JadwalFragment : Fragment() {
         rvJadwal.adapter = adapter
     }
 
-    private fun setupNavButtons() {
-        btnPrevMonth.setOnClickListener {
-            if (currentMonth == 0) {
-                currentMonth = 11
-                currentYear--
-            } else {
-                currentMonth--
+    private fun setupSpinners() {
+        // Bulan
+        val monthAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            monthNames
+        )
+        monthAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinMonth.adapter = monthAdapter
+
+        // Tahun: tahun lalu, tahun ini, tahun depan
+        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+        val years = arrayOf(
+            (currentYear - 1).toString(),
+            currentYear.toString(),
+            (currentYear + 1).toString()
+        )
+        val yearAdapter = ArrayAdapter(
+            requireContext(),
+            android.R.layout.simple_spinner_item,
+            years
+        )
+        yearAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        spinYear.adapter = yearAdapter
+
+        // Set default ke bulan & tahun sekarang
+        spinMonth.setSelection(selectedMonth)
+        spinYear.setSelection(years.indexOf(currentYear.toString()).takeIf { it >= 0 } ?: 1)
+
+        isSpinnerReady = true
+
+        val listener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (!isSpinnerReady) return
+                selectedMonth = spinMonth.selectedItemPosition
+                selectedYear = years[spinYear.selectedItemPosition].toInt()
+                loadJadwal()
             }
-            loadJadwal()
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        btnNextMonth.setOnClickListener {
-            if (currentMonth == 11) {
-                currentMonth = 0
-                currentYear++
-            } else {
-                currentMonth++
-            }
-            loadJadwal()
-        }
+        spinMonth.onItemSelectedListener = listener
+        spinYear.onItemSelectedListener  = listener
+
+        // Load awal
+        loadJadwal()
     }
 
-    // ── Main data loader ───────────────────────────────────────
+    // ── Main loader ──────────────────────────────────────────────
 
     private fun loadJadwal() {
-        // Update header label
-        val cal = Calendar.getInstance()
-        cal.set(currentYear, currentMonth, 1)
-        txtMonthYear.text = monthYearFmt.format(cal.time)
-            .replaceFirstChar { it.uppercase() }
-
         showLoading()
 
         lifecycleScope.launch {
@@ -149,74 +160,82 @@ class JadwalFragment : Fragment() {
                 val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
                     ?: return@launch
 
-                // Range tanggal bulan ini
-                val firstDayStr = String.format("%04d-%02d-01", currentYear, currentMonth + 1)
+                val firstDayStr = String.format("%04d-%02d-01", selectedYear, selectedMonth + 1)
+                val cal = Calendar.getInstance()
+                cal.set(selectedYear, selectedMonth, 1)
                 val lastDay = cal.getActualMaximum(Calendar.DAY_OF_MONTH)
-                val lastDayStr = String.format("%04d-%02d-%02d", currentYear, currentMonth + 1, lastDay)
+                val lastDayStr = String.format("%04d-%02d-%02d", selectedYear, selectedMonth + 1, lastDay)
+                val todayStr = dateFmt.format(Calendar.getInstance().time)
 
-                val todayCal = Calendar.getInstance()
-                val todayStr = dateFmt.format(todayCal.time)
+                // Pastikan shifts sudah ter-cache
+                if (ShiftHelper.cachedShifts.isEmpty()) {
+                    ShiftHelper.loadShifts()
+                }
 
-                // ── 1. Fetch semua user_shifts s/d akhir bulan ini ──
-                // Website insert row baru tiap kali jadwal berubah dengan effective_date = tanggal berlaku.
-                // Untuk setiap hari, shift yang berlaku adalah row TERAKHIR yang effective_date <= hari itu.
+                // ── 1. user_shifts history ────────────────────────────
+                // Ambil SEMUA row s/d akhir bulan ini, exclude off & profile_edit
+                // Kolom penting: shift_id, effective_date
                 val userShiftsRaw = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("user_shifts")
                         .select {
                             filter {
                                 eq("user_id", userId)
                                 lte("effective_date", lastDayStr)
-                                // Ambil semua row — termasuk yang berlaku dari bulan sebelumnya
+                                neq("shift_type", "off")
+                                neq("shift_type", "profile_edit")
                             }
                             order("effective_date", Order.ASCENDING)
                         }
                         .decodeList<Map<String, kotlinx.serialization.json.JsonElement>>()
                 }
 
-                // Buat list terurut: (effective_date, shift_type) — exclude off & profile_edit
-                // yang merupakan override hari khusus, bukan perubahan shift bulanan
-                data class ShiftEntry(val effectiveDate: String, val shiftType: String)
-                val shiftHistory = userShiftsRaw
-                    .mapNotNull { row ->
-                        val date   = row["effective_date"]?.toString()?.trim('"') ?: return@mapNotNull null
-                        val sType  = row["shift_type"]?.toString()?.trim('"') ?: return@mapNotNull null
-                        // skip off dan profile_edit — mereka bukan perubahan shift bulanan
-                        if (sType == "off" || sType == "profile_edit") return@mapNotNull null
-                        ShiftEntry(date, sType)
-                    }
-                    .sortedBy { it.effectiveDate }
+                // Buat history: (effective_date → shift_id)
+                data class ShiftEntry(val effectiveDate: String, val shiftId: String)
+                val shiftHistory = userShiftsRaw.mapNotNull { row ->
+                    val date    = row["effective_date"]?.toString()?.trim('"') ?: return@mapNotNull null
+                    val shiftId = row["shift_id"]?.toString()?.trim('"')
+                        ?.takeIf { it != "null" && it.isNotBlank() } ?: return@mapNotNull null
+                    ShiftEntry(date, shiftId)
+                }.sortedBy { it.effectiveDate }
 
-                // Helper: cari shift yang berlaku untuk suatu tanggal
-                // = ShiftEntry dengan effective_date tertinggi yang <= tanggal tsb
-                fun shiftForDate(dateStr: String): String? {
-                    return shiftHistory
+                // Helper: shift yang berlaku di suatu tanggal
+                fun shiftForDate(dateStr: String): Shift? {
+                    val entry = shiftHistory
                         .filter { it.effectiveDate <= dateStr }
-                        .lastOrNull()
-                        ?.shiftType
+                        .lastOrNull() ?: return null
+                    return ShiftHelper.cachedShifts.find { it.id == entry.shiftId }
                 }
 
-                // ── 2. Default shift karyawan ───────────────────────
-                val userShiftDefault = withContext(Dispatchers.IO) {
+                // ── 2. Default shift user (dari tabel users) ──────────
+                val userRecord = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("users")
                         .select { filter { eq("id", userId) } }
                         .decodeList<com.carefastindo.absensi.data.model.User>()
                 }.firstOrNull()
 
-                val defaultShiftType = userShiftDefault?.shiftType
-                val userRole         = userShiftDefault?.role ?: ""
+                val userRole = userRecord?.role ?: ""
+                // defaultShift: cari di cachedShifts berdasarkan nama yang mirip shiftType
+                val defaultShift: Shift? = userRecord?.shiftType?.let { st ->
+                    ShiftHelper.cachedShifts.find { it.name.equals(st, ignoreCase = true) }
+                        ?: ShiftHelper.cachedShifts.find {
+                            it.name.contains(st, ignoreCase = true)
+                                    || st.contains(it.name, ignoreCase = true)
+                        }
+                }
 
-                // Update shift info header — pakai shift yang berlaku hari ini
+                // Update header info shift aktif hari ini
+                val activeShiftToday = shiftForDate(todayStr) ?: defaultShift
                 withContext(Dispatchers.Main) {
-                    val activeShift = shiftForDate(todayStr) ?: defaultShiftType
-                    if (activeShift != null) {
-                        val (masuk, pulang) = ShiftHelper.getShiftTimes(userRole, activeShift)
-                        txtShiftInfo.text = "Shift ${activeShift.replaceFirstChar { it.uppercase() }} · $masuk – $pulang"
+                    if (activeShiftToday != null) {
+                        val start = activeShiftToday.startTime.take(5)
+                        val end   = activeShiftToday.endTime.take(5)
+                        txtShiftInfo.text = "${activeShiftToday.name} · $start – $end"
                     } else {
                         txtShiftInfo.text = ""
                     }
                 }
 
-                // ── 3. Fetch attendance bulan ini ───────────────────
+                // ── 3. Attendance bulan ini ───────────────────────────
                 val attendanceList = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("attendance")
                         .select {
@@ -227,9 +246,9 @@ class JadwalFragment : Fragment() {
                             }
                         }.decodeList<Attendance>()
                 }
-                val attendanceByDate = attendanceList.associateBy { it.date }
+                val attByDate = attendanceList.associateBy { it.date }
 
-                // ── 4. Fetch off_schedules bulan ini (off dari Android/DaruratLembur) ──
+                // ── 4. Off schedules (Android) ────────────────────────
                 val offList = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("off_schedules")
                         .select {
@@ -242,16 +261,15 @@ class JadwalFragment : Fragment() {
                 }
                 val offDates = offList.map { it.date }.toMutableSet()
 
-                // 4b. Fetch off dari user_shifts (off yang di-set website, shift_type='off')
-                val offFromWebsite = userShiftsRaw
-                    .filter { row ->
-                        val sType = row["shift_type"]?.toString()?.trim('"') ?: ""
-                        sType == "off"
-                    }
-                    .mapNotNull { row -> row["effective_date"]?.toString()?.trim('"') }
-                offDates.addAll(offFromWebsite)
+                // Off dari website (user_shifts shift_type='off')
+                val offFromWeb = userShiftsRaw.filter { row ->
+                    row["shift_type"]?.toString()?.trim('"') == "off"
+                }.mapNotNull { row ->
+                    row["effective_date"]?.toString()?.trim('"')
+                }
+                offDates.addAll(offFromWeb)
 
-                // ── 5. Fetch emergency_assignments bulan ini ─────────
+                // ── 5. Emergency assignments ──────────────────────────
                 val emergencyList = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("emergency_assignments")
                         .select {
@@ -262,10 +280,9 @@ class JadwalFragment : Fragment() {
                             }
                         }.decodeList<EmergencyAssignment>()
                 }
-                // Map: tanggal → EmergencyAssignment (lembur / ganti_off)
-                val emergencyByDate = emergencyList.associateBy { it.targetDate }
+                val emergByDate = emergencyList.associateBy { it.targetDate }
 
-                // ── 6. Fetch overtime_assignments bulan ini ──────────
+                // ── 6. Overtime assignments ───────────────────────────
                 val overtimeList = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("overtime_assignments")
                         .select {
@@ -278,17 +295,17 @@ class JadwalFragment : Fragment() {
                 }
                 val overtimeByDate = overtimeList.associateBy { it.assignmentDate }
 
-                // ── 7. Tentukan apakah ada jadwal bulan ini ─────────
-                // Ada jadwal = ada entri shift history yang berlaku di bulan ini ATAU default shift terdefinisi
-                val hasAnySchedule = shiftHistory.isNotEmpty() || defaultShiftType != null
+                // ── 7. Tentukan apakah ada jadwal bulan ini ───────────
+                // Ada jika: ada history shift_id valid ATAU ada default shift
+                val hasAnySchedule = shiftHistory.isNotEmpty() || defaultShift != null
 
-                // ── 8. Build list per hari ───────────────────────────
-                val newDays = mutableListOf<DayItem>()
+                // ── 8. Build list per hari ────────────────────────────
                 val iterCal = Calendar.getInstance()
-                iterCal.set(currentYear, currentMonth, 1)
+                iterCal.set(selectedYear, selectedMonth, 1)
+                val newDays = mutableListOf<DayItem>()
 
                 for (d in 1..lastDay) {
-                    iterCal.set(currentYear, currentMonth, d)
+                    iterCal.set(selectedYear, selectedMonth, d)
                     val dateStr = dateFmt.format(iterCal.time)
                     val dayName = dayShortFmt.format(iterCal.time)
                         .replaceFirstChar { it.uppercase() }
@@ -297,28 +314,26 @@ class JadwalFragment : Fragment() {
                     val isFuture = dateStr > todayStr
                     val isToday  = dateStr == todayStr
 
-                    // Shift hari ini: cek user_shifts history (effective_date <= hari ini), fallback ke default
-                    val shiftType = shiftForDate(dateStr) ?: defaultShiftType
-                    val shiftLabel = buildShiftLabel(userRole, shiftType, isOff)
+                    // Shift berlaku untuk hari ini
+                    val shift = if (!isOff) shiftForDate(dateStr) ?: defaultShift else null
 
-                    // Attendance hanya relevan jika hari ini atau sudah lewat
-                    val att = if (!isFuture) attendanceByDate[dateStr] else null
+                    // Attendance hanya untuk hari ini atau sudah lewat
+                    val att = if (!isFuture) attByDate[dateStr] else null
 
                     // Lembur info
-                    val lemburInfo = buildLemburInfo(dateStr, emergencyByDate, overtimeByDate)
+                    val lemburInfo = buildLemburInfo(dateStr, emergByDate, overtimeByDate)
 
                     newDays.add(
                         DayItem(
-                            dateStr     = dateStr,
-                            dayName     = dayName,
-                            dayNumber   = d,
-                            shiftLabel  = shiftLabel,
-                            isOff       = isOff,
-                            isFuture    = isFuture,
-                            isToday     = isToday,
-                            attendance  = att,
-                            lemburInfo  = lemburInfo,
-                            hasSchedule = hasAnySchedule
+                            dateStr   = dateStr,
+                            dayName   = dayName,
+                            dayNumber = d,
+                            shift     = shift,
+                            isOff     = isOff,
+                            isFuture  = isFuture,
+                            isToday   = isToday,
+                            attendance = att,
+                            lemburInfo = lemburInfo
                         )
                     )
                 }
@@ -332,7 +347,7 @@ class JadwalFragment : Fragment() {
                         showEmpty()
                     } else {
                         showList()
-                        // Scroll ke hari ini
+                        // Scroll ke hari ini jika bulan aktif
                         val todayIdx = newDays.indexOfFirst { it.dateStr == todayStr }
                         if (todayIdx >= 0) {
                             (rvJadwal.layoutManager as LinearLayoutManager)
@@ -348,34 +363,28 @@ class JadwalFragment : Fragment() {
         }
     }
 
-    // ── Helpers ─────────────────────────────────────────────────
-
-    private fun buildShiftLabel(role: String, shiftType: String?, isOff: Boolean): String {
-        if (isOff) return "Off / Libur"
-        if (shiftType == null) return "-"
-        val (masuk, pulang) = ShiftHelper.getShiftTimes(role, shiftType)
-        return "Shift ${shiftType.replaceFirstChar { it.uppercase() }} · $masuk – $pulang"
-    }
+    // ── Helpers ──────────────────────────────────────────────────
 
     private fun buildLemburInfo(
         dateStr: String,
-        emergencyByDate: Map<String, EmergencyAssignment>,
+        emergByDate: Map<String, EmergencyAssignment>,
         overtimeByDate: Map<String, OvertimeAssignment>
     ): String? {
-        val emergency = emergencyByDate[dateStr]
+        val emergency = emergByDate[dateStr]
         if (emergency != null && emergency.reason == "lembur") {
-            val inTime  = emergency.overtimeIn?.substring(11, 16) ?: "–"
-            val outTime = emergency.overtimeOut?.substring(11, 16) ?: "–"
-            return if (emergency.overtimeIn != null) "⚡ Lembur · $inTime – $outTime"
-            else "⚡ Ditugaskan Lembur"
+            return if (emergency.overtimeIn != null) {
+                val inT  = emergency.overtimeIn.substring(11, 16)
+                val outT = emergency.overtimeOut?.substring(11, 16) ?: "–"
+                "⚡ Lembur · $inT – $outT"
+            } else "⚡ Ditugaskan Lembur"
         }
-
         val overtime = overtimeByDate[dateStr]
         if (overtime != null) {
-            val inTime  = overtime.overtimeIn?.substring(11, 16) ?: "–"
-            val outTime = overtime.overtimeOut?.substring(11, 16) ?: "–"
-            return if (overtime.overtimeIn != null) "⚡ Lembur · $inTime – $outTime"
-            else "⚡ Ditugaskan Lembur"
+            return if (overtime.overtimeIn != null) {
+                val inT  = overtime.overtimeIn.substring(11, 16)
+                val outT = overtime.overtimeOut?.substring(11, 16) ?: "–"
+                "⚡ Lembur · $inT – $outT"
+            } else "⚡ Ditugaskan Lembur"
         }
         return null
     }
@@ -398,25 +407,24 @@ class JadwalFragment : Fragment() {
         txtEmptyJadwal.visibility = View.GONE
     }
 
-    // ── RecyclerView Adapter ───────────────────────────────────
+    // ── RecyclerView Adapter ─────────────────────────────────────
 
     inner class JadwalAdapter(private val items: List<DayItem>) :
         RecyclerView.Adapter<JadwalAdapter.ViewHolder>() {
 
         inner class ViewHolder(v: View) : RecyclerView.ViewHolder(v) {
-            val viewIndicator:   View        = v.findViewById(R.id.viewDayIndicator)
-            val txtDayName:      TextView    = v.findViewById(R.id.txtDayName)
-            val txtDayNumber:    TextView    = v.findViewById(R.id.txtDayNumber)
-            val txtShiftLabel:   TextView    = v.findViewById(R.id.txtShiftLabel)
-            val layoutAbsenDetail: ViewGroup = v.findViewById(R.id.layoutAbsenDetail)
-            val txtCheckIn:      TextView    = v.findViewById(R.id.txtCheckIn)
-            val txtBreak:        TextView    = v.findViewById(R.id.txtBreak)
-            val txtCheckOut:     TextView    = v.findViewById(R.id.txtCheckOut)
-            val txtJadwalSaja:   TextView    = v.findViewById(R.id.txtJadwalSaja)
-            val txtLemburInfo:   TextView    = v.findViewById(R.id.txtLemburInfo)
-            val txtOffInfo:      TextView    = v.findViewById(R.id.txtOffInfo)
-            val cardStatusBadge: CardView    = v.findViewById(R.id.cardStatusBadge)
-            val txtStatusBadge:  TextView    = v.findViewById(R.id.txtStatusBadge)
+            val viewIndicator:    View        = v.findViewById(R.id.viewDayIndicator)
+            val txtDayNumber:     TextView    = v.findViewById(R.id.txtDayNumber)
+            val txtDayName:       TextView    = v.findViewById(R.id.txtDayName)
+            val txtShiftLabel:    TextView    = v.findViewById(R.id.txtShiftLabel)
+            val layoutAbsenDetail: ViewGroup  = v.findViewById(R.id.layoutAbsenDetail)
+            val txtCheckIn:       TextView    = v.findViewById(R.id.txtCheckIn)
+            val txtBreak:         TextView    = v.findViewById(R.id.txtBreak)
+            val txtCheckOut:      TextView    = v.findViewById(R.id.txtCheckOut)
+            val txtSubLabel:      TextView    = v.findViewById(R.id.txtSubLabel)
+            val txtLemburInfo:    TextView    = v.findViewById(R.id.txtLemburInfo)
+            val cardStatusBadge:  CardView    = v.findViewById(R.id.cardStatusBadge)
+            val txtStatusBadge:   TextView    = v.findViewById(R.id.txtStatusBadge)
         }
 
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ViewHolder {
@@ -431,110 +439,110 @@ class JadwalFragment : Fragment() {
             val item = items[position]
             val ctx  = holder.itemView.context
 
-            // Tanggal
-            holder.txtDayName.text   = item.dayName
+            // Tanggal & nama hari
             holder.txtDayNumber.text = item.dayNumber.toString().padStart(2, '0')
+            holder.txtDayName.text   = item.dayName
 
-            // Warna angka hari ini
-            if (item.isToday) {
-                holder.txtDayNumber.setTextColor(ContextCompat.getColor(ctx, R.color.primary))
-            } else {
-                holder.txtDayNumber.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary_light))
-            }
-
-            // Shift label
-            holder.txtShiftLabel.text = item.shiftLabel
+            // Warna angka tanggal: biru untuk hari ini
+            holder.txtDayNumber.setTextColor(
+                if (item.isToday) ContextCompat.getColor(ctx, R.color.primary)
+                else ContextCompat.getColor(ctx, R.color.text_primary_light)
+            )
 
             // Sembunyikan semua dulu
             holder.layoutAbsenDetail.visibility = View.GONE
-            holder.txtJadwalSaja.visibility     = View.GONE
+            holder.txtSubLabel.visibility       = View.GONE
             holder.txtLemburInfo.visibility     = View.GONE
-            holder.txtOffInfo.visibility        = View.GONE
             holder.cardStatusBadge.visibility   = View.GONE
 
             when {
                 // ── Off ──────────────────────────────────────────────
                 item.isOff -> {
-                    holder.txtOffInfo.visibility = View.VISIBLE
-                    holder.txtShiftLabel.text    = "Off / Libur"
-                    setIndicatorColor(holder, "#9E9E9E")
+                    holder.txtShiftLabel.text = "Off / Libur"
+                    holder.txtShiftLabel.setTextColor(ContextCompat.getColor(ctx, R.color.text_secondary_light))
+                    setIndicator(holder, "#9E9E9E")
                 }
 
-                // ── Hari depan: hanya jadwal ─────────────────────────
+                // ── Hari depan ────────────────────────────────────────
                 item.isFuture -> {
-                    holder.txtJadwalSaja.visibility = View.VISIBLE
-                    holder.txtJadwalSaja.text       = "Jadwal masuk"
-                    setIndicatorColor(holder, "#90CAF9")
+                    val shiftLabel = item.shift?.let {
+                        "${it.name} · ${it.startTime.take(5)} – ${it.endTime.take(5)}"
+                    } ?: "Jadwal masuk"
+                    holder.txtShiftLabel.text = shiftLabel
+                    holder.txtShiftLabel.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary_light))
+                    setIndicator(holder, "#90CAF9")
 
-                    // Lembur di hari depan yang sudah ditugaskan
                     if (item.lemburInfo != null) {
                         holder.txtLemburInfo.visibility = View.VISIBLE
                         holder.txtLemburInfo.text       = item.lemburInfo
                     }
                 }
 
-                // ── Hari sudah lewat / hari ini ─────────────────────
+                // ── Hari lalu / hari ini ──────────────────────────────
                 else -> {
+                    val shiftLabel = item.shift?.let {
+                        "${it.name} · ${it.startTime.take(5)} – ${it.endTime.take(5)}"
+                    } ?: "-"
+                    holder.txtShiftLabel.text = shiftLabel
+                    holder.txtShiftLabel.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary_light))
+
                     val att = item.attendance
-                    if (att != null) {
-                        // Ada rekam absensi
-                        holder.layoutAbsenDetail.visibility = View.VISIBLE
-                        holder.txtCheckIn.text  = "Masuk: ${att.checkInTime?.take(5) ?: "--"}"
-                        holder.txtBreak.text    = "Ist: ${att.breakStart?.substring(11, 16) ?: att.breakTime?.take(5) ?: "--"}"
-                        holder.txtCheckOut.text = "Pulang: ${att.checkOutTime?.take(5) ?: "--"}"
+                    when {
+                        att != null -> {
+                            // Ada rekam absensi
+                            holder.layoutAbsenDetail.visibility = View.VISIBLE
+                            holder.txtCheckIn.text  = "Masuk: ${att.checkInTime?.take(5) ?: "--"}"
+                            holder.txtBreak.text    = "Ist: ${att.breakStart?.substring(11, 16) ?: att.breakTime?.take(5) ?: "--"}"
+                            holder.txtCheckOut.text = "Pulang: ${att.checkOutTime?.take(5) ?: "--"}"
 
-                        // Badge status
-                        holder.cardStatusBadge.visibility = View.VISIBLE
-                        holder.txtStatusBadge.text = att.status.uppercase(Locale.getDefault())
-                        val (badgeBg, indicatorColor) = statusColors(att.status)
-                        holder.cardStatusBadge.setCardBackgroundColor(
-                            android.graphics.Color.parseColor(badgeBg)
-                        )
-                        holder.txtStatusBadge.setTextColor(android.graphics.Color.WHITE)
-                        setIndicatorColor(holder, indicatorColor)
-
-                        // Lembur info
-                        if (item.lemburInfo != null) {
-                            holder.txtLemburInfo.visibility = View.VISIBLE
-                            holder.txtLemburInfo.text       = item.lemburInfo
+                            holder.cardStatusBadge.visibility = View.VISIBLE
+                            holder.txtStatusBadge.text = att.status.uppercase(Locale.getDefault())
+                            val (badgeBg, indicatorHex) = statusColors(att.status)
+                            holder.cardStatusBadge.setCardBackgroundColor(
+                                android.graphics.Color.parseColor(badgeBg)
+                            )
+                            holder.txtStatusBadge.setTextColor(android.graphics.Color.WHITE)
+                            setIndicator(holder, indicatorHex)
                         }
-                    } else {
-                        // Tidak ada rekam (alfa / belum absen)
-                        if (item.isToday) {
-                            holder.txtJadwalSaja.visibility = View.VISIBLE
-                            holder.txtJadwalSaja.text       = "Belum absen"
-                            setIndicatorColor(holder, "#FB923C")
-                        } else {
-                            // Hari lalu tanpa rekam → alfa
+                        item.isToday -> {
+                            holder.txtSubLabel.visibility = View.VISIBLE
+                            holder.txtSubLabel.text       = "Belum absen"
+                            setIndicator(holder, "#FB923C")
+                        }
+                        else -> {
+                            // Hari lalu tanpa rekam = alfa
                             holder.cardStatusBadge.visibility = View.VISIBLE
                             holder.txtStatusBadge.text        = "ALFA"
                             holder.cardStatusBadge.setCardBackgroundColor(
                                 android.graphics.Color.parseColor("#EF4444")
                             )
                             holder.txtStatusBadge.setTextColor(android.graphics.Color.WHITE)
-                            setIndicatorColor(holder, "#EF4444")
+                            setIndicator(holder, "#EF4444")
                         }
+                    }
+
+                    if (item.lemburInfo != null) {
+                        holder.txtLemburInfo.visibility = View.VISIBLE
+                        holder.txtLemburInfo.text       = item.lemburInfo
                     }
                 }
             }
         }
 
-        private fun setIndicatorColor(holder: ViewHolder, hex: String) {
+        private fun setIndicator(holder: ViewHolder, hex: String) {
             holder.viewIndicator.setBackgroundColor(android.graphics.Color.parseColor(hex))
         }
 
-        /** Returns Pair(badgeBackgroundHex, indicatorHex) */
         private fun statusColors(status: String): Pair<String, String> {
             return when (status.lowercase()) {
-                "hadir"        -> "#4CAF50" to "#4CAF50"
-                "terlambat"    -> "#FF9800" to "#FF9800"
-                "izin"         -> "#7C3AED" to "#7C3AED"
-                "sakit"        -> "#3B82F6" to "#3B82F6"
-                "cuti"         -> "#EC4899" to "#EC4899"
-                "off"          -> "#9E9E9E" to "#9E9E9E"
-                "tidak_absen",
-                "alfa"         -> "#EF4444" to "#EF4444"
-                else           -> "#6B7280" to "#6B7280"
+                "hadir"                  -> "#4CAF50" to "#4CAF50"
+                "terlambat"              -> "#FF9800" to "#FF9800"
+                "izin"                   -> "#7C3AED" to "#7C3AED"
+                "sakit"                  -> "#3B82F6" to "#3B82F6"
+                "cuti"                   -> "#EC4899" to "#EC4899"
+                "off"                    -> "#9E9E9E" to "#9E9E9E"
+                "tidak_absen", "alfa"    -> "#EF4444" to "#EF4444"
+                else                     -> "#6B7280" to "#6B7280"
             }
         }
     }
