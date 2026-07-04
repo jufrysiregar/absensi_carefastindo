@@ -73,7 +73,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
 
-                        <!-- NIP -->
+                        <!-- ID Pegawai -->
                         <RelativeLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -81,7 +81,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="NIP"
+                                android:text="ID Pegawai"
                                 android:textColor="@color/text_secondary_light"
                                 android:textSize="14sp" />
                             <TextView
