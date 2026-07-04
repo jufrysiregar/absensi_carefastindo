@@ -54,7 +54,7 @@
                         android:id="@+id/rgLeaveType"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
-                        android:orientation="horizontal"
+                        android:orientation="vertical"
                         android:layout_marginBottom="16dp"
                         android:checkedButton="@id/rbIzin">
 
@@ -65,7 +65,7 @@
                             android:text="Izin"
                             android:textColor="@color/text_primary_light"
                             android:buttonTint="@color/primary"
-                            android:layout_marginEnd="24dp" />
+                            android:layout_marginBottom="4dp" />
 
                         <RadioButton
                             android:id="@+id/rbSakit"
@@ -73,7 +73,19 @@
                             android:layout_height="wrap_content"
                             android:text="Sakit"
                             android:textColor="@color/text_primary_light"
-                            android:buttonTint="@color/primary" />
+                            android:buttonTint="@color/primary"
+                            android:layout_marginBottom="4dp" />
+
+                        <RadioButton
+                            android:id="@+id/rbCutiSegera"
+                            android:layout_width="wrap_content"
+                            android:layout_height="wrap_content"
+                            android:text="Cuti (Segera Hadir)"
+                            android:textColor="#BBBBBB"
+                            android:buttonTint="#BBBBBB"
+                            android:enabled="false"
+                            android:clickable="false"
+                            android:focusable="false" />
                     </RadioGroup>
 
                     <!-- Date Selection Row -->

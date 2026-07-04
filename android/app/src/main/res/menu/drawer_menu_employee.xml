@@ -9,7 +9,7 @@
         <item
             android:id="@+id/nav_emp_izin"
             android:icon="@android:drawable/ic_menu_my_calendar"
-            android:title="Pengajuan Cuti" />
+            android:title="Pengajuan" />
         <item
             android:id="@+id/nav_emp_riwayat"
             android:icon="@android:drawable/ic_menu_recent_history"
