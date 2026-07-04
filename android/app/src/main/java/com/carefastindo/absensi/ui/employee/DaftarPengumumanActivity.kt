@@ -55,8 +55,8 @@ class DaftarPengumumanActivity : AppCompatActivity() {
 
         btnBack.setOnClickListener { finish() }
 
-        // Warna indikator refresh biru
-        swipeRefreshLayout.setColorSchemeResources(android.R.color.holo_blue_bright)
+        // Warna indikator refresh hitam
+        swipeRefreshLayout.setColorSchemeResources(android.R.color.black)
         swipeRefreshLayout.setOnRefreshListener {
             loadAnnouncements(isRefresh = true)
         }
