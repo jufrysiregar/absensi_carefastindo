@@ -1,0 +1,181 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_marginHorizontal="0dp"
+    android:layout_marginVertical="5dp"
+    app:cardCornerRadius="12dp"
+    app:cardElevation="2dp"
+    app:cardBackgroundColor="@color/white">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:padding="14dp"
+        android:gravity="center_vertical">
+
+        <!-- Indikator Hari (strip kiri berwarna) -->
+        <View
+            android:id="@+id/viewDayIndicator"
+            android:layout_width="4dp"
+            android:layout_height="48dp"
+            android:background="#4CAF50"
+            android:layout_marginEnd="14dp" />
+
+        <!-- Kolom tanggal -->
+        <LinearLayout
+            android:layout_width="52dp"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:gravity="center">
+
+            <TextView
+                android:id="@+id/txtDayName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Sen"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary_light"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/txtDayNumber"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="01"
+                android:textSize="20sp"
+                android:textStyle="bold"
+                android:textColor="@color/text_primary_light" />
+        </LinearLayout>
+
+        <!-- Divider vertikal -->
+        <View
+            android:layout_width="1dp"
+            android:layout_height="40dp"
+            android:background="#E5E7EB"
+            android:layout_marginHorizontal="12dp" />
+
+        <!-- Info shift & status -->
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/txtShiftLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Shift Pagi · 07:00 – 15:00"
+                android:textSize="13sp"
+                android:textColor="@color/text_primary_light"
+                android:textStyle="bold" />
+
+            <!-- Row jam absensi (hanya tampil jika sudah ada rekam) -->
+            <LinearLayout
+                android:id="@+id/layoutAbsenDetail"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:orientation="horizontal"
+                android:layout_marginTop="4dp"
+                android:visibility="gone">
+
+                <TextView
+                    android:id="@+id/txtCheckIn"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Masuk: 07:05"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary_light" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" · "
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary_light" />
+
+                <TextView
+                    android:id="@+id/txtBreak"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Ist: 12:00"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary_light" />
+
+                <TextView
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text=" · "
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary_light" />
+
+                <TextView
+                    android:id="@+id/txtCheckOut"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Pulang: 15:02"
+                    android:textSize="11sp"
+                    android:textColor="@color/text_secondary_light" />
+            </LinearLayout>
+
+            <!-- Label jadwal saja (hari depan) -->
+            <TextView
+                android:id="@+id/txtJadwalSaja"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Jadwal masuk"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary_light"
+                android:layout_marginTop="4dp"
+                android:visibility="gone" />
+
+            <!-- Label overtime/lembur -->
+            <TextView
+                android:id="@+id/txtLemburInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="⚡ Lembur · 15:00 – 18:00"
+                android:textSize="11sp"
+                android:textColor="#F59E0B"
+                android:layout_marginTop="3dp"
+                android:visibility="gone" />
+
+            <!-- Label off -->
+            <TextView
+                android:id="@+id/txtOffInfo"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Off / Libur"
+                android:textSize="11sp"
+                android:textColor="@color/text_secondary_light"
+                android:layout_marginTop="4dp"
+                android:visibility="gone" />
+        </LinearLayout>
+
+        <!-- Badge status (kanan) -->
+        <androidx.cardview.widget.CardView
+            android:id="@+id/cardStatusBadge"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            app:cardCornerRadius="6dp"
+            app:cardElevation="0dp"
+            android:visibility="gone">
+
+            <TextView
+                android:id="@+id/txtStatusBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:paddingHorizontal="10dp"
+                android:paddingVertical="4dp"
+                android:text="HADIR"
+                android:textColor="@color/white"
+                android:textSize="10sp"
+                android:textStyle="bold" />
+        </androidx.cardview.widget.CardView>
+
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

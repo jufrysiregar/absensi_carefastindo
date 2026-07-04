@@ -7,13 +7,13 @@
             android:icon="@android:drawable/ic_menu_today"
             android:title="Dashboard" />
         <item
+            android:id="@+id/nav_emp_jadwal"
+            android:icon="@android:drawable/ic_menu_month"
+            android:title="Jadwal" />
+        <item
             android:id="@+id/nav_emp_izin"
             android:icon="@android:drawable/ic_menu_my_calendar"
             android:title="Pengajuan" />
-        <item
-            android:id="@+id/nav_emp_riwayat"
-            android:icon="@android:drawable/ic_menu_recent_history"
-            android:title="Riwayat Absensi" />
         <item
             android:id="@+id/nav_emp_darurat"
             android:icon="@android:drawable/ic_menu_edit"

@@ -15,8 +15,18 @@ import QRCode from 'qrcode'
 
 interface Stats { total: number; hadir: number; izin: number; sakit: number; lembur: number; gantiOff: number }
 interface RecentAttendance {
-  id: string; user_name: string; shift_name: string
-  date: string; check_in: string | null; status: string
+  id: string
+  user_id: string
+  user_name: string
+  shift_name: string
+  date: string
+  check_in: string | null
+  check_out: string | null
+  break_start: string | null
+  break_end: string | null
+  status: string
+  overtime_check_in: string | null
+  overtime_check_out: string | null
 }
 interface WeeklyData { day: string; hadir: number }
 interface ShiftCard { id: string; name: string; start_time: string; end_time: string }
@@ -109,19 +119,59 @@ export default function DashboardPage() {
   const { data: recent, isLoading: recentLoading } = useQuery<RecentAttendance[]>({
     queryKey: ['dashboard', 'recent'],
     queryFn: async () => {
+      const today = new Date().toISOString().split('T')[0]
       const { data } = await supabase
         .from('attendance')
-        .select('id, status, check_in_time, date, users!attendance_user_id_fkey(name, user_shifts(shifts(name)))')
-        .order('created_at', { ascending: false })
+        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, user_id, users!attendance_user_id_fkey(name)')
+        .eq('date', today)
+        .order('check_in_time', { ascending: false })
         .limit(5)
 
-      return (data ?? []).map((r: any) => ({
+      const rows = data ?? []
+      const userIds = [...new Set(rows.map((r: any) => r.user_id))]
+
+      // Fetch shift names
+      let shiftMap: Record<string, string> = {}
+      if (userIds.length > 0) {
+        const { data: usData } = await supabase
+          .from('user_shifts')
+          .select('user_id, created_at, shifts(name)')
+          .in('user_id', userIds)
+          .not('shift_id', 'is', null)
+          .neq('shift_type', 'off')
+          .neq('shift_type', 'profile_edit')
+          .order('created_at', { ascending: false })
+        ;(usData ?? []).forEach((us: any) => {
+          if (!shiftMap[us.user_id]) shiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
+        })
+      }
+
+      // Fetch overtime
+      let otMap: Record<string, { check_in: string | null; check_out: string | null }> = {}
+      if (userIds.length > 0) {
+        const { data: otData } = await supabase
+          .from('overtime_assignments')
+          .select('user_id, overtime_check_in, overtime_check_out')
+          .in('user_id', userIds)
+          .eq('assignment_date', today)
+        ;(otData ?? []).forEach((ot: any) => {
+          otMap[ot.user_id] = { check_in: ot.overtime_check_in, check_out: ot.overtime_check_out }
+        })
+      }
+
+      return rows.map((r: any) => ({
         id: r.id,
+        user_id: r.user_id,
         user_name: r.users?.name ?? '—',
-        shift_name: r.users?.user_shifts?.[0]?.shifts?.name ?? '—',
+        shift_name: shiftMap[r.user_id] ?? '—',
         date: r.date,
         check_in: r.check_in_time,
+        check_out: r.check_out_time,
+        break_start: r.break_start,
+        break_end: r.break_end,
         status: r.status,
+        overtime_check_in: otMap[r.user_id]?.check_in ?? null,
+        overtime_check_out: otMap[r.user_id]?.check_out ?? null,
       }))
     },
   })
@@ -501,78 +551,21 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* LEAVE REQUESTS (KOTAK KANAN) */}
-        <Card className="shadow-sm">
-          <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-100 bg-slate-50/50">
-            <CardTitle className="text-base flex items-center gap-2">
-              <ClipboardList className="w-4 h-4 text-blue-500" /> Leave Requests
+        {/* PENGAJUAN CUTI KARYAWAN (KOTAK KANAN) */}
+        <Card className="shadow-sm opacity-60 pointer-events-none select-none">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-200 bg-slate-100/80">
+            <CardTitle className="text-base flex items-center gap-2 text-slate-500">
+              🏖️ Pengajuan Cuti Karyawan
             </CardTitle>
-            <Badge variant="outline" className="text-amber-600 bg-amber-50 border-amber-100 font-mono text-[10px]">
-              Pending
+            <Badge variant="outline" className="text-slate-600 bg-slate-300 border-slate-300 font-mono text-[10px] uppercase tracking-wider">
+              Segera Hadir
             </Badge>
           </CardHeader>
           <CardContent className="p-4 h-[250px] overflow-y-auto">
-            {leavesLoading ? (
-              <div className="space-y-3">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <Skeleton key={i} className="h-12 w-full rounded-lg" />
-                ))}
-              </div>
-            ) : pendingLeaves.length === 0 ? (
-              <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
-                <CheckCircle className="w-8 h-8 text-slate-300 mb-2" />
-                <p className="text-xs">Tidak ada pengajuan pending saat ini</p>
-              </div>
-            ) : (
-              <div className="space-y-2">
-                {pendingLeaves.map(r => (
-                  <div
-                    key={r.id}
-                    className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors"
-                  >
-                    <div className="min-w-0 flex-1 pr-2">
-                      <h5 className="font-semibold text-slate-800 text-sm truncate">{r.user_name}</h5>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full capitalize ${
-                          r.type === 'cuti'
-                            ? 'bg-blue-100 text-blue-800'
-                            : r.type === 'sakit'
-                            ? 'bg-red-100 text-red-800'
-                            : 'bg-purple-100 text-purple-800'
-                        }`}>
-                          {r.type}
-                        </span>
-                        <span className="text-[10px] text-slate-400">
-                          {new Date(r.created_at).toLocaleDateString('id-ID', {
-                            day: 'numeric',
-                            month: 'short',
-                          })}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <button
-                        onClick={() => updateLeaveStatusMutation.mutate({ id: r.id, status: 'approved' })}
-                        disabled={updateLeaveStatusMutation.isPending}
-                        className="w-8 h-8 rounded-full bg-emerald-50 text-emerald-600 border border-emerald-100 hover:bg-emerald-500 hover:text-white flex items-center justify-center transition-all active:scale-90"
-                        title="Approve"
-                      >
-                        <Check className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => updateLeaveStatusMutation.mutate({ id: r.id, status: 'rejected' })}
-                        disabled={updateLeaveStatusMutation.isPending}
-                        className="w-8 h-8 rounded-full bg-rose-50 text-rose-600 border border-rose-100 hover:bg-rose-500 hover:text-white flex items-center justify-center transition-all active:scale-90"
-                        title="Reject"
-                      >
-                        <X className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+            <div className="flex flex-col items-center justify-center h-full text-center text-slate-400">
+              <CheckCircle className="w-8 h-8 text-slate-300 mb-2" />
+              <p className="text-xs">Fitur Pengajuan Cuti akan segera hadir</p>
+            </div>
           </CardContent>
         </Card>
       </div>
@@ -581,7 +574,7 @@ export default function DashboardPage() {
       <Card className="shadow-sm overflow-hidden">
         <CardHeader className="border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">5 Karyawan Terakhir Absen</CardTitle>
+            <CardTitle className="text-base">Karyawan Terakhir Absen</CardTitle>
             <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
               Realtime
@@ -590,43 +583,79 @@ export default function DashboardPage() {
         </CardHeader>
         <CardContent className="p-0">
           <Table>
-            <TableHeader>
-              <TableRow className="hover:bg-transparent">
-                <TableHead>Nama</TableHead>
-                <TableHead>Shift</TableHead>
-                <TableHead>Tanggal</TableHead>
-                <TableHead>Jam Masuk</TableHead>
-                <TableHead>Status</TableHead>
+            <TableHeader className="bg-[#F8FAFC]">
+              <TableRow className="hover:bg-transparent border-b border-slate-200">
+                <TableHead className="w-[50px] pl-4 text-slate-600 font-semibold py-3">No</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Nama</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3">Shift</TableHead>
+                <TableHead className="text-center text-slate-600 font-semibold py-3">Tanggal</TableHead>
+                <TableHead className="text-center text-slate-600 font-semibold py-3">Jam Masuk</TableHead>
+                <TableHead className="text-center text-slate-600 font-semibold py-3">Istirahat</TableHead>
+                <TableHead className="text-center text-slate-600 font-semibold py-3">Jam Pulang</TableHead>
+                <TableHead className="text-center text-slate-600 font-semibold py-3">Jam Lembur</TableHead>
+                <TableHead className="text-center text-slate-600 font-semibold py-3">Status</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {recentLoading ? (
                 Array.from({ length: 5 }).map((_, i) => (
                   <TableRow key={i}>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-20" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-24" /></TableCell>
-                    <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                    <TableCell className="pl-4"><Skeleton className="h-4 w-6" /></TableCell>
+                    {Array.from({ length: 7 }).map((_, j) => (
+                      <TableCell key={j}><Skeleton className="h-4 w-full max-w-[90px]" /></TableCell>
+                    ))}
                     <TableCell><Skeleton className="h-6 w-16 rounded-full" /></TableCell>
                   </TableRow>
                 ))
               ) : recent?.length ? (
-                recent.map(r => (
-                  <TableRow key={r.id}>
+                recent.map((r, i) => (
+                  <TableRow key={r.id} className="bg-white border-b border-slate-100 hover:bg-slate-50/50">
+                    <TableCell className="font-mono text-xs text-slate-400 pl-4">{i + 1}</TableCell>
                     <TableCell className="font-medium text-slate-700">{r.user_name}</TableCell>
                     <TableCell className="text-slate-500">{r.shift_name}</TableCell>
-                    <TableCell className="text-slate-500">{formatDate(r.date)}</TableCell>
-                    <TableCell className="text-slate-500">{r.check_in ? formatTime(r.check_in) : '—'}</TableCell>
-                    <TableCell>
-                      <Badge variant={r.status === 'hadir' ? 'success' : r.status === 'izin' ? 'warning' : r.status === 'sakit' ? 'destructive' : 'default'}>
-                        {r.status.charAt(0).toUpperCase() + r.status.slice(1)}
-                      </Badge>
+                    <TableCell className="text-slate-500 text-center">{formatDate(r.date)}</TableCell>
+                    <TableCell className="text-slate-500 text-center">{r.check_in ? formatTime(r.check_in) : '—'}</TableCell>
+                    <TableCell className="text-slate-500 text-center">
+                      {(() => {
+                        if (!r.break_start) return '—'
+                        const start = formatTime(r.break_start)
+                        if (!r.break_end) return `${start} - --:--`
+                        return `${start} - ${formatTime(r.break_end)}`
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-slate-500 text-center">{r.check_out ? formatTime(r.check_out) : '—'}</TableCell>
+                    <TableCell className="text-slate-500 text-center">
+                      {(() => {
+                        if (!r.overtime_check_in && !r.overtime_check_out) return <span className="text-slate-400">—</span>
+                        if (r.overtime_check_in && !r.overtime_check_out) return <span className="text-orange-500 font-medium text-xs">Berlangsung</span>
+                        if (r.overtime_check_in && r.overtime_check_out) return <span className="text-slate-600 text-xs">{formatTime(r.overtime_check_in)} - {formatTime(r.overtime_check_out)}</span>
+                        return <span className="text-slate-400">—</span>
+                      })()}
+                    </TableCell>
+                    <TableCell className="text-center">
+                      {(() => {
+                        const statusColor =
+                          r.status === 'hadir' ? { bg: '#DCFCE7', text: '#166534' }
+                          : r.status === 'terlambat' ? { bg: '#FEF9C3', text: '#854D0E' }
+                          : r.status === 'absen' || r.status === 'alfa' ? { bg: '#FEE2E2', text: '#991B1B' }
+                          : r.status === 'sakit' ? { bg: '#DBEAFE', text: '#1E40AF' }
+                          : r.status === 'izin' ? { bg: '#EDE9FE', text: '#5B21B6' }
+                          : r.status === 'cuti' ? { bg: '#FCE7F3', text: '#9D174D' }
+                          : r.status === 'off' ? { bg: '#F1F5F9', text: '#475569' }
+                          : { bg: '#F3F4F6', text: '#374151' }
+                        const label = r.status === 'off' ? 'Off' : r.status.charAt(0).toUpperCase() + r.status.slice(1)
+                        return (
+                          <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                            {label}
+                          </span>
+                        )
+                      })()}
                     </TableCell>
                   </TableRow>
                 ))
               ) : (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-slate-400">
+                  <TableCell colSpan={9} className="text-center py-8 text-slate-400">
                     Belum ada data absensi hari ini
                   </TableCell>
                 </TableRow>

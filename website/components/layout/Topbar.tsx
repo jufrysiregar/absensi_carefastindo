@@ -13,7 +13,6 @@ const pageTitles: Record<string, string> = {
   '/dashboard/qr-code': 'QR Code Generator',
   '/dashboard/announcements': 'Announcements',
   '/dashboard/reports': 'Reports',
-  '/dashboard/leave-requests': 'Leave Requests',
 }
 
 export default function Topbar() {

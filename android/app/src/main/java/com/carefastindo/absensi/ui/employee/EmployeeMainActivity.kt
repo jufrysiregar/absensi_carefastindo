@@ -84,8 +84,8 @@ class EmployeeMainActivity : AppCompatActivity() {
         binding.navView.setNavigationItemSelectedListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.nav_emp_dashboard -> replaceFragment(EmployeeDashboardFragment(), "Dashboard")
+                R.id.nav_emp_jadwal    -> replaceFragment(JadwalFragment(), "Jadwal")
                 R.id.nav_emp_izin      -> replaceFragment(PengajuanIzinFragment(), "Pengajuan Cuti")
-                R.id.nav_emp_riwayat   -> replaceFragment(RiwayatAbsensiFragment(), "Riwayat Absensi")
                 R.id.nav_emp_darurat   -> startActivity(Intent(this, DaruratLemburActivity::class.java))
                 R.id.nav_emp_profil    -> replaceFragment(ProfilFragment(), "Profil")
                 R.id.nav_emp_tentang   -> startActivity(Intent(this, TentangAplikasiActivity::class.java))

@@ -127,7 +127,7 @@ export default function ManagementEmployeePage() {
   const queryClient = useQueryClient()
 
   const PAGE_SIZE = 10
-  const ACT_PAGE_SIZE = 10
+  const ACT_PAGE_SIZE = 5
 
   // Tab State / Table Filter States
   const [search, setSearch] = useState('')
@@ -221,7 +221,11 @@ export default function ManagementEmployeePage() {
     notes: '',
     overtime_in: '',
     overtime_out: '',
+    shift_id: '',
   })
+
+  // ─── Swap shift state ────────────────────────────────────
+  const [swapTargetUserId, setSwapTargetUserId] = useState('')
   const [savingAtt, setSavingAtt] = useState(false)
 
   const debouncedAttSearch = useDebounce(attSearch, 500)
@@ -260,6 +264,15 @@ export default function ManagementEmployeePage() {
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'overtime_assignments' }, () => {
         queryClient.invalidateQueries({ queryKey: ['overtime'] })
+        queryClient.invalidateQueries({ queryKey: ['attendance'] })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'off_schedules' }, () => {
+        // off dari Android (ganti_off DaruratLembur) → refresh tabel attendance
+        queryClient.invalidateQueries({ queryKey: ['attendance'] })
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'emergency_assignments' }, () => {
+        // lembur/ganti_off dari Android/leader → refresh tabel attendance
+        queryClient.invalidateQueries({ queryKey: ['attendance'] })
       })
       .subscribe()
 
@@ -356,11 +369,12 @@ export default function ManagementEmployeePage() {
     queryFn: async () => {
       const rows: ActivityLogRow[] = []
 
-      // 1. Change Shift dari user_shifts (shift_type bukan 'off')
+      // 1. Change Shift dari user_shifts (shift_type bukan 'off' dan bukan 'profile_edit')
       const { data: shiftData } = await supabase
         .from('user_shifts')
         .select('id, user_id, shift_id, effective_date, created_at, users(name), shifts(name)')
         .neq('shift_type', 'off')
+        .neq('shift_type', 'profile_edit')
         .eq('effective_date', actFilterDate)
         .order('created_at', { ascending: false })
 
@@ -515,88 +529,157 @@ export default function ManagementEmployeePage() {
   const { data: attendanceData, isLoading: attendanceLoading } = useQuery({
     queryKey: ['attendance', attPage, debouncedAttSearch, attFilterDate, attFilterShift, attFilterStatus],
     queryFn: async () => {
-      let query = supabase
+      const targetDate = attFilterDate || new Date().toISOString().split('T')[0]
+
+      // 1. Fetch semua user aktif kecuali superadmin
+      const { data: allUsers } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('is_active', true)
+        .neq('role', 'superadmin')
+        .order('name')
+
+      const allUserList = allUsers ?? []
+
+      // 2. Fetch attendance yang sudah ada untuk tanggal ini
+      const { data: attData } = await supabase
         .from('attendance')
-        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, user_id, users!attendance_user_id_fkey(name, user_shifts(shift_type, shifts(id, name)))', { count: 'exact' })
-        .order('date', { ascending: false })
-        .order('check_in_time', { ascending: false })
+        .select('id, status, check_in_time, check_out_time, break_start, break_end, date, selfie_url, location_lat, location_lng, note, user_id')
+        .eq('date', targetDate)
 
-      if (attFilterDate) query = query.eq('date', attFilterDate)
-      if (attFilterStatus !== 'all') query = query.eq('status', attFilterStatus)
+      const attMap: Record<string, any> = {}
+      ;(attData ?? []).forEach((r: any) => { attMap[r.user_id] = r })
 
-      const from = (attPage - 1) * PAGE_SIZE
-      const { data, count } = await query.range(from, from + PAGE_SIZE - 1)
+      // 3. Fetch user_shifts untuk tanggal ini (off/izin/sakit yang di-set admin)
+      const { data: userShiftsData } = await supabase
+        .from('user_shifts')
+        .select('user_id, shift_type, shifts(id, name)')
+        .eq('effective_date', targetDate)
 
-      // Fetch overtime data for all rows in batch
-      const rowsData = data ?? []
-      const userDatePairs = rowsData.map((r: any) => ({ user_id: r.user_id, date: r.date }))
-
-      let overtimeMap: Record<string, { check_in: string | null; check_out: string | null }> = {}
-      if (userDatePairs.length > 0) {
-        const uniqueDates = [...new Set(userDatePairs.map((p: any) => p.date))]
-        const uniqueUsers = [...new Set(userDatePairs.map((p: any) => p.user_id))]
-        const { data: otData } = await supabase
-          .from('overtime_assignments')
-          .select('user_id, assignment_date, overtime_check_in, overtime_check_out')
-          .in('user_id', uniqueUsers)
-          .in('assignment_date', uniqueDates)
-        ;(otData ?? []).forEach((ot: any) => {
-          overtimeMap[`${ot.user_id}_${ot.assignment_date}`] = {
-            check_in: ot.overtime_check_in,
-            check_out: ot.overtime_check_out,
-          }
-        })
-      }
-
-      // Fetch user_shifts filtered by the exact attendance dates (to get correct shift_type per day)
-      let userShiftMap: Record<string, { shift_name: string; shift_type: string | null }> = {}
-      if (userDatePairs.length > 0) {
-        const uniqDates2 = [...new Set(userDatePairs.map((p: any) => p.date))]
-        const uniqUsers2 = [...new Set(userDatePairs.map((p: any) => p.user_id))]
-        const { data: usData } = await supabase
-          .from('user_shifts')
-          .select('user_id, effective_date, shift_type, shifts(name)')
-          .in('user_id', uniqUsers2)
-          .in('effective_date', uniqDates2)
-        ;(usData ?? []).forEach((us: any) => {
-          userShiftMap[`${us.user_id}_${us.effective_date}`] = {
-            shift_name: (us.shifts as any)?.name ?? '—',
-            shift_type: us.shift_type ?? null,
-          }
-        })
-      }
-
-      let mapped = rowsData.map((r: any) => {
-        const shiftKey = `${r.user_id}_${r.date}`
-        const matchedShift = userShiftMap[shiftKey]
-        return {
-          id: r.id,
-          user_id: r.user_id,
-          user_name: r.users?.name ?? '—',
-          shift_name: matchedShift?.shift_name ?? r.users?.user_shifts?.[0]?.shifts?.name ?? '—',
-          shift_type: matchedShift?.shift_type ?? r.users?.user_shifts?.[0]?.shift_type ?? null,
-          date: r.date,
-          check_in: r.check_in_time,
-          check_out: r.check_out_time,
-          break_start: r.break_start,
-          break_end: r.break_end,
-          status: r.status,
-          selfie_url: r.selfie_url,
-          location: r.location_lat && r.location_lng ? `${r.location_lat}, ${r.location_lng}` : '—',
-          notes: r.note,
-          overtime_check_in: overtimeMap[`${r.user_id}_${r.date}`]?.check_in ?? null,
-          overtime_check_out: overtimeMap[`${r.user_id}_${r.date}`]?.check_out ?? null,
+      const userShiftMap: Record<string, { shift_name: string; shift_type: string | null }> = {}
+      ;(userShiftsData ?? []).forEach((us: any) => {
+        userShiftMap[us.user_id] = {
+          shift_name: (us.shifts as any)?.name ?? '—',
+          shift_type: us.shift_type ?? null,
         }
       })
 
+      // 3b. Fetch off_schedules untuk tanggal ini (off yang di-set dari Android/DaruratLembur)
+      const { data: offSchedulesData } = await supabase
+        .from('off_schedules')
+        .select('user_id')
+        .eq('off_date', targetDate)
+
+      const offScheduleUserIds = new Set<string>(
+        (offSchedulesData ?? []).map((r: any) => r.user_id as string)
+      )
+
+      // 4. Fetch shift aktif per user (shift default mereka) — exclude off dan profile_edit
+      const { data: defaultShifts } = await supabase
+        .from('user_shifts')
+        .select('user_id, created_at, shift_type, shifts(name)')
+        .not('shift_id', 'is', null)
+        .neq('shift_type', 'off')
+        .neq('shift_type', 'profile_edit')
+        .order('created_at', { ascending: false })
+
+      // Fetch profile_edit shifts secara terpisah (ini shift aktif user dari edit profil)
+      const { data: profileEditShifts } = await supabase
+        .from('user_shifts')
+        .select('user_id, created_at, shift_type, shifts(name)')
+        .not('shift_id', 'is', null)
+        .eq('shift_type', 'profile_edit')
+        .order('created_at', { ascending: false })
+
+      const defaultShiftMap: Record<string, string> = {}
+      // Gabungkan keduanya, ambil yang terbaru per user
+      const allDefaultShifts = [...(defaultShifts ?? []), ...(profileEditShifts ?? [])]
+        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      allDefaultShifts.forEach((us: any) => {
+        if (!defaultShiftMap[us.user_id]) {
+          defaultShiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
+        }
+      })
+
+      // 5. Fetch overtime untuk tanggal ini
+      const { data: otData } = await supabase
+        .from('overtime_assignments')
+        .select('user_id, assignment_date, overtime_check_in, overtime_check_out')
+        .eq('assignment_date', targetDate)
+
+      const overtimeMap: Record<string, { check_in: string | null; check_out: string | null }> = {}
+      ;(otData ?? []).forEach((ot: any) => {
+        overtimeMap[ot.user_id] = {
+          check_in: ot.overtime_check_in,
+          check_out: ot.overtime_check_out,
+        }
+      })
+
+      // 6. Gabungkan semua user dengan data absensi / admin override
+      let mapped = allUserList.map((u: any) => {
+        const att = attMap[u.id]
+        const shiftOverride = userShiftMap[u.id]
+        // off bisa dari user_shifts (shift_type='off') ATAU off_schedules (dari Android)
+        const isOffFromAndroid = offScheduleUserIds.has(u.id)
+        const isOff = shiftOverride?.shift_type === 'off' || isOffFromAndroid
+        const shiftName = isOff
+          ? 'Off' 
+          : (shiftOverride?.shift_name && shiftOverride.shift_name !== '—' 
+            ? shiftOverride.shift_name 
+            : (defaultShiftMap[u.id] ?? '—'))
+        const shiftType = isOff ? 'off' : (shiftOverride?.shift_type ?? null)
+
+        // Tentukan status:
+        // - Ada record attendance → pakai status dari attendance
+        // - Ada user_shifts dengan shift_type off ATAU off_schedules → 'off'
+        // - Tanggal lampau (< hari ini) dan tidak ada absensi → 'alfa'
+        // - Tanggal hari ini atau masa depan tanpa absensi → '-' (belum absen)
+        let status = '-'
+        if (att) {
+          status = att.status
+        } else if (isOff) {
+          status = 'off'
+        } else if (targetDate < new Date().toISOString().split('T')[0]) {
+          status = 'alfa'
+        }
+
+        return {
+          id: att?.id ?? `virtual_${u.id}`,
+          user_id: u.id,
+          user_name: u.name,
+          shift_name: shiftName,
+          shift_type: shiftType,
+          date: targetDate,
+          check_in: att?.check_in_time ?? null,
+          check_out: att?.check_out_time ?? null,
+          break_start: att?.break_start ?? null,
+          break_end: att?.break_end ?? null,
+          status,
+          selfie_url: att?.selfie_url ?? null,
+          location: att?.location_lat && att?.location_lng ? `${att.location_lat}, ${att.location_lng}` : '—',
+          notes: att?.note ?? null,
+          overtime_check_in: overtimeMap[u.id]?.check_in ?? null,
+          overtime_check_out: overtimeMap[u.id]?.check_out ?? null,
+        }
+      })
+
+      // 7. Filter pencarian & shift
       if (debouncedAttSearch) {
         mapped = mapped.filter(r => r.user_name.toLowerCase().includes(debouncedAttSearch.toLowerCase()))
       }
       if (attFilterShift !== 'all') {
         mapped = mapped.filter(r => r.shift_name === attFilterShift)
       }
+      if (attFilterStatus !== 'all') {
+        mapped = mapped.filter(r => r.status === attFilterStatus)
+      }
 
-      return { rows: mapped, total: count ?? 0 }
+      // 8. Pagination manual
+      const total = mapped.length
+      const from = (attPage - 1) * PAGE_SIZE
+      const paged = mapped.slice(from, from + PAGE_SIZE)
+
+      return { rows: paged, total }
     },
     placeholderData: (previousData) => previousData,
   })
@@ -618,6 +701,18 @@ export default function ManagementEmployeePage() {
     }
     setAddingUser(true)
     try {
+      // Cek duplikat NIP sebelum simpan
+      const { data: existingNip } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('nip', addUserForm.nip)
+        .maybeSingle()
+      if (existingNip) {
+        toast.error(`NIP ${addUserForm.nip} sudah digunakan oleh karyawan "${existingNip.name}". Gunakan NIP yang berbeda.`)
+        setAddingUser(false)
+        return
+      }
+
       const res = await fetch('/api/users', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -669,6 +764,20 @@ export default function ManagementEmployeePage() {
     }
     setUpdatingUser(true)
     try {
+      // Cek duplikat NIP jika NIP berubah
+      if (editForm.nip !== (editingUser.nip === '—' ? '' : editingUser.nip)) {
+        const { data: existingNip } = await supabase
+          .from('users')
+          .select('id, name')
+          .eq('nip', editForm.nip)
+          .neq('id', editingUser.id)
+          .maybeSingle()
+        if (existingNip) {
+          toast.error(`NIP ${editForm.nip} sudah digunakan oleh karyawan "${existingNip.name}". Gunakan NIP yang berbeda.`)
+          setUpdatingUser(false)
+          return
+        }
+      }
       // 1. Update public.users
       const { error: userError } = await supabase
         .from('users')
@@ -699,16 +808,18 @@ export default function ManagementEmployeePage() {
         })
       }
 
-      // 3. Insert new user_shifts row if shift changed (maintaining historical logs)
+      // 3. Update shift karyawan via user_shifts
+      // Gunakan shift_type 'profile_edit' agar tidak muncul di Daftar Riwayat Aktivitas
       if (editForm.shiftId !== editingUser.shift_id) {
+        const newShiftId = editForm.shiftId === 'none' || !editForm.shiftId ? null : editForm.shiftId
         const { error: shiftError } = await supabase
           .from('user_shifts')
           .insert({
             user_id: editingUser.id,
-            shift_id: editForm.shiftId === 'none' || !editForm.shiftId ? null : editForm.shiftId,
-            effective_date: new Date().toISOString().split('T')[0]
+            shift_id: newShiftId,
+            effective_date: new Date().toISOString().split('T')[0],
+            shift_type: 'profile_edit',
           })
-
         if (shiftError) throw shiftError
       }
 
@@ -717,6 +828,7 @@ export default function ManagementEmployeePage() {
       setShowEditPassword(false)
       queryClient.invalidateQueries({ queryKey: ['users'] })
       queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
+      queryClient.invalidateQueries({ queryKey: ['attendance'] })
     } catch (err: any) {
       toast.error('Gagal memperbarui data: ' + err.message)
     } finally {
@@ -750,7 +862,7 @@ export default function ManagementEmployeePage() {
 
   // Update shift mutation
   const updateShiftMutation = useMutation({
-    mutationFn: async (payload: { userId: string; shiftId: string; effectiveDate: string }) => {
+    mutationFn: async (payload: { userId: string; shiftId: string; effectiveDate: string; swapUserId?: string; swapShiftId?: string }) => {
       const { error } = await supabase
         .from('user_shifts')
         .insert({
@@ -767,10 +879,28 @@ export default function ManagementEmployeePage() {
         message: 'Admin mengubah jadwal shift kerja kamu, silahkan absen sesuai jam yang ditentukan. Tetap semangat dalam bekerja dan ciptakan kualitas kerja mu yang terbaik.',
         is_read: false,
       })
+
+      // Tukar shift: user target mendapat shift lama user utama
+      if (payload.swapUserId && payload.swapShiftId) {
+        await supabase.from('user_shifts').insert({
+          user_id: payload.swapUserId,
+          shift_id: payload.swapShiftId,
+          effective_date: payload.effectiveDate,
+        })
+        // Kirim notifikasi ke user target
+        await supabase.from('notifications').insert({
+          user_id: payload.swapUserId,
+          message: 'Jadwal shift kamu telah ditukar dengan karyawan lain oleh admin. Silahkan absen sesuai jam yang ditentukan.',
+          is_read: false,
+        })
+      }
     },
     onSuccess: () => {
       toast.success('Shift karyawan berhasil diperbarui!')
       setShiftForm({ userId: '', shiftId: '', effectiveDate: new Date().toISOString().split('T')[0], shiftType: 'single', keterangan: '' })
+      setSwapTargetUserId('')
+      setShowJadwalModal(false)
+      setJadwalMenu('')
       queryClient.invalidateQueries({ queryKey: ['users'] })
       queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
     },
@@ -781,32 +911,54 @@ export default function ManagementEmployeePage() {
 
   function handleUpdateShift(e: React.FormEvent) {
     e.preventDefault()
-    if (!shiftForm.userId || !shiftForm.shiftId || !shiftForm.effectiveDate) {
-      toast.error('Isi semua kolom form terlebih dahulu!')
+    if (!shiftForm.userId || !shiftForm.effectiveDate) {
+      toast.error('Pilih karyawan dan tanggal efektif terlebih dahulu!')
       return
     }
 
-    if (shiftForm.shiftType === 'single') {
-      const selectedUser = users.find(u => u.id === shiftForm.userId)
-      const currentShiftId = selectedUser?.shift_id || ''
-      const targetShiftId = shiftForm.shiftId === 'none' ? '' : shiftForm.shiftId
+    const selectedUser = users.find(u => u.id === shiftForm.userId)
+    const currentShiftId = selectedUser?.shift_id || ''
 
-      if (currentShiftId === targetShiftId) {
-        toast.error('Gagal memperbarui shift: Karyawan sudah berada di shift tersebut! Perubahan shift tidak valid.')
+    // Mode tukar shift: ambil shift dari masing-masing user secara otomatis
+    if (swapTargetUserId) {
+      const swapUser = users.find(u => u.id === swapTargetUserId)
+      const swapShiftId = swapUser?.shift_id || ''
+
+      if (!swapShiftId || !currentShiftId) {
+        toast.error('Salah satu karyawan belum memiliki shift. Pastikan keduanya sudah ada shift.')
         return
       }
 
-      updateShiftMutation.mutate({ userId: shiftForm.userId, shiftId: shiftForm.shiftId, effectiveDate: shiftForm.effectiveDate })
+      if (currentShiftId === swapShiftId) {
+        toast.error('Kedua karyawan sudah berada di shift yang sama. Tukar shift tidak diperlukan.')
+        return
+      }
+
+      // User A mendapat shift B, User B mendapat shift A
+      updateShiftMutation.mutate({
+        userId: shiftForm.userId,
+        shiftId: swapShiftId,       // shift user B → ke user A
+        effectiveDate: shiftForm.effectiveDate,
+        swapUserId: swapTargetUserId,
+        swapShiftId: currentShiftId, // shift user A → ke user B
+      })
     } else {
-      if (!shiftForm.keterangan) {
-        toast.error('Keterangan wajib diisi untuk penugasan lembur!')
+      // Mode ganti shift biasa — butuh shiftId manual, tampilkan error jika tidak ada
+      if (!shiftForm.shiftId) {
+        toast.error('Pilih shift baru atau pilih karyawan yang akan ditukar shiftnya.')
         return
       }
-      assignOvertimeMutation.mutate({ 
-        userId: shiftForm.userId, 
-        shiftId: shiftForm.shiftId, 
-        date: shiftForm.effectiveDate, 
-        keterangan: shiftForm.keterangan 
+
+      const targetShiftId = shiftForm.shiftId === 'none' ? '' : shiftForm.shiftId
+      if (currentShiftId === targetShiftId) {
+        toast.error('Karyawan sudah berada di shift tersebut.')
+        return
+      }
+
+      updateShiftMutation.mutate({
+        userId: shiftForm.userId,
+        shiftId: shiftForm.shiftId,
+        effectiveDate: shiftForm.effectiveDate,
       })
     }
   }
@@ -870,6 +1022,8 @@ export default function ManagementEmployeePage() {
     onSuccess: () => {
       toast.success('Lembur berhasil di-assign!')
       setShiftForm({ userId: '', shiftId: '', effectiveDate: new Date().toISOString().split('T')[0], shiftType: 'single', keterangan: '' })
+      setShowJadwalModal(false)
+      setJadwalMenu('')
       queryClient.invalidateQueries({ queryKey: ['shiftHistory'] })
     },
     onError: (error: any) => {
@@ -939,9 +1093,27 @@ export default function ManagementEmployeePage() {
         effective_date: offForm.offDate,
       })
       if (error) throw error
+
+      // Sinkronisasi: jika ada record attendance di tanggal tsb, update statusnya ke 'off'
+      const { data: attRecord } = await supabase
+        .from('attendance')
+        .select('id')
+        .eq('user_id', offForm.userId)
+        .eq('date', offForm.offDate)
+        .maybeSingle()
+      if (attRecord) {
+        await supabase
+          .from('attendance')
+          .update({ status: 'off' })
+          .eq('id', attRecord.id)
+      }
+
       toast.success('Hari off berhasil diset!')
       setOffForm({ userId: '', offDate: new Date().toISOString().split('T')[0], reason: 'libur' })
+      setShowJadwalModal(false)
+      setJadwalMenu('')
       queryClient.invalidateQueries({ queryKey: ['offDays'] })
+      queryClient.invalidateQueries({ queryKey: ['attendance'] })
     } catch (err: any) {
       toast.error('Gagal: ' + err.message)
     } finally {
@@ -1021,13 +1193,32 @@ export default function ManagementEmployeePage() {
           message: 'Permintaan mu untuk ganti off dengan rekan kerja telah di perbaharui, silahkan cek. Terimakasih.',
           is_read: false,
         })
-        // Notifikasi juga ke karyawan pengganti (replacing_user_id) jika ada
+        // Kirim notifikasi juga ke karyawan pengganti (replacing_user_id) jika ada
         if (payload.replacing_user_id) {
           await supabase.from('notifications').insert({
             user_id: payload.replacing_user_id,
             message: 'Permintaan mu untuk ganti off dengan rekan kerja telah di perbaharui, silahkan cek. Terimakasih.',
             is_read: false,
           })
+
+          // Sinkronisasi ke off_schedules: karyawan pengganti (replacing) dapat hari off di target_date
+          // agar Android JadwalFragment dan DaruratLemburActivity membacanya konsisten
+          if (!payload.id) {
+            // Hanya saat INSERT baru, bukan update
+            // Cari nama assigned_user untuk reason yang readable
+            const { data: assignedUserData } = await supabase
+              .from('users')
+              .select('name')
+              .eq('id', payload.assigned_user_id)
+              .maybeSingle()
+            const assignedUserName = (assignedUserData as any)?.name ?? payload.assigned_user_id
+
+            await supabase.from('off_schedules').upsert({
+              user_id: payload.replacing_user_id,
+              off_date: payload.target_date,
+              reason: `Ganti off dengan ${assignedUserName}`,
+            }, { onConflict: 'user_id,off_date' })
+          }
         }
       }
     },
@@ -1056,6 +1247,20 @@ export default function ManagementEmployeePage() {
     setEmergencyForm({ assigned_user_id: '', target_date: new Date().toISOString().split('T')[0], reason: 'lembur', replacing_user_id: '', shift_id: '', status: 'pending' })
     setEditEmergencyRow(null)
     setShowEmergencyForm(false)
+    setShowJadwalModal(false)
+    setJadwalMenu('')
+    setOffUsersOnDate([])
+  }
+
+  function closeJadwalModal() {
+    // Reset semua form state saat modal ditutup agar tidak ada data lama tersimpan
+    setShowJadwalModal(false)
+    setJadwalMenu('')
+    setShiftForm({ userId: '', shiftId: '', effectiveDate: new Date().toISOString().split('T')[0], shiftType: 'single', keterangan: '' })
+    setSwapTargetUserId('')
+    setOffForm({ userId: '', offDate: new Date().toISOString().split('T')[0], reason: 'libur' })
+    setEmergencyForm({ assigned_user_id: '', target_date: new Date().toISOString().split('T')[0], reason: 'lembur', replacing_user_id: '', shift_id: '', status: 'pending' })
+    setEditEmergencyRow(null)
     setOffUsersOnDate([])
   }
 
@@ -1147,54 +1352,132 @@ export default function ManagementEmployeePage() {
   }
 
   // Export PDF function
-  function exportPDF() {
-    if (attRows.length === 0) {
-      toast.error('Tidak ada data untuk diekspor')
-      return
-    }
+  async function exportPDF() {
+    const filterDate = new Date(attFilterDate)
+    const year = filterDate.getFullYear()
+    const month = filterDate.getMonth() // 0-indexed
+    const monthName = filterDate.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
 
-    const docDefinition = {
-      content: [
-        { text: 'Laporan Absensi — Carefastindo', style: 'header' },
-        { text: `Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, style: 'subheader' },
-        {
-          style: 'tableExample',
-          table: {
-            headerRows: 1,
-            widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
-            body: [
-              [
-                { text: 'Nama', style: 'tableHeader' },
-                { text: 'Shift', style: 'tableHeader' },
-                { text: 'Tanggal', style: 'tableHeader' },
-                { text: 'Jam Masuk', style: 'tableHeader' },
-                { text: 'Istirahat', style: 'tableHeader' },
-                { text: 'Jam Pulang', style: 'tableHeader' },
-                { text: 'Status', style: 'tableHeader' }
-              ],
-              ...attRows.map(r => [
-                r.user_name,
-                r.shift_name,
-                r.date,
-                r.check_in ? formatTime(r.check_in) : '-',
-                r.break_start ? (r.break_end ? `${formatTime(r.break_start)} - ${formatTime(r.break_end)}` : `${formatTime(r.break_start)} - --:--`) : '-',
-                r.check_out ? formatTime(r.check_out) : '-',
-                r.status
-              ])
-            ]
-          }
+    // Hitung range: 1 bulan penuh dari tanggal filter
+    const firstDay = `${year}-${String(month + 1).padStart(2, '0')}-01`
+    const lastDayDate = new Date(year, month + 1, 0)
+    const lastDay = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDayDate.getDate()).padStart(2, '0')}`
+
+    toast.loading('Memuat data absensi sebulan...')
+
+    try {
+      // Fetch semua user aktif kecuali superadmin
+      const { data: allUsers } = await supabase
+        .from('users')
+        .select('id, name')
+        .eq('is_active', true)
+        .neq('role', 'superadmin')
+        .order('name')
+
+      // Fetch semua attendance bulan tersebut
+      const { data: attData } = await supabase
+        .from('attendance')
+        .select('id, user_id, date, status, check_in_time, check_out_time, break_start, break_end')
+        .gte('date', firstDay)
+        .lte('date', lastDay)
+        .order('date', { ascending: true })
+
+      // Fetch shift default per user
+      const { data: shiftData } = await supabase
+        .from('user_shifts')
+        .select('user_id, created_at, shifts(name)')
+        .not('shift_id', 'is', null)
+        .neq('shift_type', 'off')
+        .neq('shift_type', 'profile_edit')
+        .order('created_at', { ascending: false })
+
+      const shiftMap: Record<string, string> = {}
+      ;(shiftData ?? []).forEach((us: any) => {
+        if (!shiftMap[us.user_id]) shiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
+      })
+
+      // Build lookup: user_id+date → attendance
+      const attLookup: Record<string, any> = {}
+      ;(attData ?? []).forEach((a: any) => {
+        attLookup[`${a.user_id}_${a.date}`] = a
+      })
+
+      // Generate semua kombinasi user x tanggal dalam bulan
+      const rows: any[] = []
+      const daysInMonth = lastDayDate.getDate()
+      for (const u of (allUsers ?? [])) {
+        for (let d = 1; d <= daysInMonth; d++) {
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+          const att = attLookup[`${u.id}_${dateStr}`]
+          const status = att ? att.status : (dateStr < new Date().toISOString().split('T')[0] ? 'alfa' : '-')
+          rows.push({
+            user_name: u.name,
+            shift_name: shiftMap[u.id] ?? '—',
+            date: dateStr,
+            check_in: att?.check_in_time ?? null,
+            check_out: att?.check_out_time ?? null,
+            break_start: att?.break_start ?? null,
+            break_end: att?.break_end ?? null,
+            status,
+          })
         }
-      ],
-      styles: {
-        header: { fontSize: 18, bold: true, margin: [0, 0, 0, 5] },
-        subheader: { fontSize: 10, italics: true, margin: [0, 0, 0, 15] },
-        tableExample: { margin: [0, 5, 0, 15] },
-        tableHeader: { bold: true, fontSize: 11, color: 'black' }
       }
+
+      if (rows.length === 0) {
+        toast.dismiss()
+        toast.error('Tidak ada data untuk bulan ini')
+        return
+      }
+
+      const docDefinition = {
+        pageOrientation: 'landscape' as const,
+        content: [
+          { text: 'Laporan Absensi Bulanan — PT. Carefastindo Indonesia', style: 'header' },
+          { text: `Periode: ${monthName}  |  Tanggal Cetak: ${new Date().toLocaleDateString('id-ID')}`, style: 'subheader' },
+          {
+            style: 'tableExample',
+            table: {
+              headerRows: 1,
+              widths: ['*', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+              body: [
+                [
+                  { text: 'Nama', style: 'tableHeader' },
+                  { text: 'Shift', style: 'tableHeader' },
+                  { text: 'Tanggal', style: 'tableHeader' },
+                  { text: 'Jam Masuk', style: 'tableHeader' },
+                  { text: 'Istirahat', style: 'tableHeader' },
+                  { text: 'Jam Pulang', style: 'tableHeader' },
+                  { text: 'Status', style: 'tableHeader' }
+                ],
+                ...rows.map(r => [
+                  r.user_name,
+                  r.shift_name,
+                  new Date(r.date).toLocaleDateString('id-ID', { day: '2-digit', month: 'short', year: 'numeric' }),
+                  r.check_in ? formatTime(r.check_in) : '-',
+                  r.break_start ? (r.break_end ? `${formatTime(r.break_start)} - ${formatTime(r.break_end)}` : `${formatTime(r.break_start)} - --:--`) : '-',
+                  r.check_out ? formatTime(r.check_out) : '-',
+                  r.status.charAt(0).toUpperCase() + r.status.slice(1),
+                ])
+              ]
+            }
+          }
+        ],
+        styles: {
+          header: { fontSize: 16, bold: true, margin: [0, 0, 0, 5] },
+          subheader: { fontSize: 9, italics: true, margin: [0, 0, 0, 12] },
+          tableExample: { margin: [0, 5, 0, 15], fontSize: 8 },
+          tableHeader: { bold: true, fontSize: 9, color: 'black', fillColor: '#F1F5F9' }
+        }
+      }
+
+      toast.dismiss()
+      // @ts-ignore
+      pdfMake.createPdf(docDefinition).download(`laporan_absensi_${year}_${String(month + 1).padStart(2, '0')}.pdf`)
+      toast.success('PDF berhasil diekspor!')
+    } catch (err: any) {
+      toast.dismiss()
+      toast.error('Gagal ekspor PDF: ' + err.message)
     }
-    // @ts-ignore
-    pdfMake.createPdf(docDefinition).download(`attendance_${attFilterDate || 'all'}.pdf`)
-    toast.success('PDF berhasil diekspor!')
   }
 
   // Filtered users for table
@@ -1244,7 +1527,7 @@ export default function ManagementEmployeePage() {
                 Atur Radius Lokasi Absensi
               </Button>
               <Button
-                onClick={() => { setShowJadwalModal(true); setJadwalMenu('') }}
+                onClick={() => { closeJadwalModal(); setShowJadwalModal(true) }}
                 className="bg-slate-600 hover:bg-slate-700 text-white font-medium"
               >
                 <Plus className="w-4 h-4 mr-1.5" />
@@ -1383,6 +1666,7 @@ export default function ManagementEmployeePage() {
               <input
                 type="date"
                 value={actFilterDate}
+                max={todayStr}
                 onChange={e => { setActFilterDate(e.target.value); setActPage(1) }}
                 className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500 h-9"
               />
@@ -1395,9 +1679,9 @@ export default function ManagementEmployeePage() {
               <TableRow className="hover:bg-transparent border-b border-slate-200">
                 <TableHead className="text-slate-600 font-semibold py-3 pl-4">No</TableHead>
                 <TableHead className="text-slate-600 font-semibold py-3">Nama Karyawan</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3">Nama Perubahan Jadwal</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3">Tanggal Efektif</TableHead>
-                <TableHead className="text-slate-600 font-semibold py-3">Status</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3 text-center">Nama Perubahan Jadwal</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3 text-center">Tanggal Efektif</TableHead>
+                <TableHead className="text-slate-600 font-semibold py-3 text-center">Status</TableHead>
                 <TableHead className="text-slate-600 font-semibold py-3 pr-4 text-center">Aksi</TableHead>
               </TableRow>
             </TableHeader>
@@ -1422,7 +1706,7 @@ export default function ManagementEmployeePage() {
                     {(actPage - 1) * ACT_PAGE_SIZE + idx + 1}
                   </TableCell>
                   <TableCell className="font-semibold text-slate-700 py-3">{row.user_name}</TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="py-3 text-center">
                     <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${
                       row.activity_type === 'Change Shift' ? 'bg-blue-100 text-blue-700' :
                       row.activity_type === 'Off Day' ? 'bg-orange-100 text-orange-700' :
@@ -1432,8 +1716,8 @@ export default function ManagementEmployeePage() {
                       {row.activity_type}
                     </span>
                   </TableCell>
-                  <TableCell className="text-slate-500 py-3">{row.effective_date}</TableCell>
-                  <TableCell className="py-3">
+                  <TableCell className="text-slate-500 py-3 text-center">{row.effective_date}</TableCell>
+                  <TableCell className="py-3 text-center">
                     <span className="px-2.5 py-1 text-xs font-semibold rounded-full bg-green-500 text-white">
                       Berjalan
                     </span>
@@ -1461,41 +1745,72 @@ export default function ManagementEmployeePage() {
 
           {/* Pagination */}
           {actTotalPages > 1 && (
-            <div className="flex items-center justify-between p-4 border-t border-slate-100">
+            <div className="flex items-center justify-end p-4 border-t border-slate-100 gap-3">
               <p className="text-xs text-slate-500">
-                Menampilkan {Math.min((actPage - 1) * ACT_PAGE_SIZE + 1, actTotal)} - {Math.min(actPage * ACT_PAGE_SIZE, actTotal)} dari {actTotal} entri
+                Menampilkan {actTotal === 0 ? 0 : Math.min((actPage - 1) * ACT_PAGE_SIZE + 1, actTotal)} - {Math.min(actPage * ACT_PAGE_SIZE, actTotal)} dari {actTotal} entri
               </p>
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setActPage(p => Math.max(1, p - 1))}
-                  disabled={actPage === 1}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all text-sm font-medium"
-                >
-                  &lt;
-                </button>
-                {Array.from({ length: actTotalPages }, (_, i) => i + 1).map(p => (
-                  <button
-                    key={p}
-                    onClick={() => setActPage(p)}
-                    className={`w-9 h-9 flex items-center justify-center rounded-xl border text-sm font-semibold transition-all ${
-                      p === actPage
-                        ? 'bg-blue-600 text-white border-blue-600'
-                        : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
-                    }`}
-                  >
-                    {p}
-                  </button>
-                ))}
-                <button
-                  onClick={() => setActPage(p => Math.min(actTotalPages, p + 1))}
-                  disabled={actPage === actTotalPages}
-                  className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all text-sm font-medium"
-                >
-                  &gt;
-                </button>
-              </div>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setActPage(p => Math.max(1, p - 1))} disabled={actPage === 1}>
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setActPage(p => Math.min(actTotalPages, p + 1))} disabled={actPage === actTotalPages}>
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
           )}
+        </CardContent>
+      </Card>
+
+      {/* PENGAJUAN CUTI KARYAWAN */}
+      <Card className="shadow-sm opacity-60 pointer-events-none select-none">
+        <CardHeader className="bg-slate-100/80 border-b border-slate-200 pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <CardTitle className="text-base font-bold text-slate-500 flex items-center gap-2">
+                🏖️ Pengajuan Cuti Karyawan
+              </CardTitle>
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-300 text-slate-600 uppercase tracking-wider">
+                Segera Hadir
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                <input
+                  placeholder="Cari nama karyawan..."
+                  disabled
+                  className="pl-9 pr-3 py-1.5 w-[200px] border border-slate-200 rounded-lg text-sm bg-slate-50 text-slate-400 h-9 cursor-not-allowed"
+                />
+              </div>
+              <select disabled className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-slate-50 text-slate-400 h-9 cursor-not-allowed">
+                <option>all</option>
+              </select>
+              <select disabled className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm bg-slate-50 text-slate-400 h-9 cursor-not-allowed">
+                <option>pending</option>
+              </select>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table className="border-collapse w-full">
+            <TableHeader className="bg-[#F8FAFC]">
+              <TableRow className="hover:bg-transparent border-b border-slate-200">
+                <TableHead className="text-slate-400 font-semibold py-3 pl-4">Nama Karyawan</TableHead>
+                <TableHead className="text-slate-400 font-semibold py-3">Jenis Pengajuan</TableHead>
+                <TableHead className="text-slate-400 font-semibold py-3">Tanggal Mulai</TableHead>
+                <TableHead className="text-slate-400 font-semibold py-3">Tanggal Selesai</TableHead>
+                <TableHead className="text-slate-400 font-semibold py-3">Alasan</TableHead>
+                <TableHead className="text-slate-400 font-semibold py-3 text-center">Status</TableHead>
+                <TableHead className="text-slate-400 font-semibold py-3 pr-4 text-center">Aksi</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              <TableRow>
+                <TableCell colSpan={7} className="text-center py-10 text-slate-400">
+                  Fitur Pengajuan Cuti akan segera hadir
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          </Table>
         </CardContent>
       </Card>
 
@@ -1544,9 +1859,26 @@ export default function ManagementEmployeePage() {
               <CardTitle className="text-lg font-bold text-slate-800">{"\uD83D\uDCC5"} Tabel Absensi Karyawan</CardTitle>
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={exportPDF} style={{ backgroundColor: '#DC143C', borderColor: '#DC143C' }} className="text-white hover:brightness-90 active:brightness-75 h-9 font-medium text-sm px-4 rounded-lg transition-all duration-150">
-                <Download className="w-4 h-4 mr-1.5" /> PDF
-              </Button>
+              {(() => {
+                const now = new Date()
+                const filterDate = new Date(attFilterDate)
+                // PDF aktif hanya jika bulan filter sudah berlalu (beda bulan dari sekarang)
+                const isPastMonth = filterDate.getFullYear() < now.getFullYear() ||
+                  (filterDate.getFullYear() === now.getFullYear() && filterDate.getMonth() < now.getMonth())
+                return (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={exportPDF}
+                    disabled={!isPastMonth}
+                    style={isPastMonth ? { backgroundColor: '#DC143C', borderColor: '#DC143C' } : { backgroundColor: '#CBD5E1', borderColor: '#CBD5E1' }}
+                    className="text-white h-9 font-medium text-sm px-4 rounded-lg transition-all duration-150 disabled:opacity-60 disabled:cursor-not-allowed"
+                    title={isPastMonth ? 'Ekspor PDF' : 'PDF hanya tersedia untuk bulan yang sudah berlalu'}
+                  >
+                    <Download className="w-4 h-4 mr-1.5" /> PDF
+                  </Button>
+                )
+              })()}
             </div>
           </div>
           
@@ -1583,6 +1915,7 @@ export default function ManagementEmployeePage() {
                 <SelectItem value="alfa">Absen</SelectItem>
                 <SelectItem value="terlambat">Terlambat</SelectItem>
                 <SelectItem value="cuti">Cuti</SelectItem>
+                <SelectItem value="cuti_segera" disabled className="text-slate-400 cursor-not-allowed">Cuti (Segera Hadir)</SelectItem>
               </SelectContent>
             </Select>
             <div className="relative shrink-0 w-[240px]">
@@ -1612,7 +1945,7 @@ export default function ManagementEmployeePage() {
               <TableHeader className="bg-[#F8FAFC]">
                 <TableRow className="hover:bg-transparent border-b border-slate-200">
                   <TableHead className="w-[50px] pl-4">No</TableHead>
-                  <TableHead>Nama</TableHead>
+                  <TableHead>Nama Karyawan</TableHead>
                   <TableHead>Shift</TableHead>
                   <TableHead className="text-center">Tanggal</TableHead>
                   <TableHead className="text-center">Jam Masuk</TableHead>
@@ -1693,8 +2026,12 @@ export default function ManagementEmployeePage() {
                             ? { bg: '#EDE9FE', text: '#5B21B6' }
                             : r.status === 'cuti'
                             ? { bg: '#FCE7F3', text: '#9D174D' }
+                            : r.status === 'off'
+                            ? { bg: '#F1F5F9', text: '#475569' }
+                            : r.status === '-'
+                            ? { bg: 'transparent', text: '#94A3B8' }
                             : { bg: '#F3F4F6', text: '#374151' }
-                          const statusLabel = r.status.charAt(0).toUpperCase() + r.status.slice(1)
+                          const statusLabel = r.status === '-' ? '—' : (r.status === 'off' ? 'Off' : r.status.charAt(0).toUpperCase() + r.status.slice(1))
                           return (
                             <span style={{ background: statusColor.bg, color: statusColor.text, padding: '2px 8px', borderRadius: '9999px', fontSize: '11px', fontWeight: 600, whiteSpace: 'nowrap' }}>
                               {statusLabel}
@@ -1704,36 +2041,50 @@ export default function ManagementEmployeePage() {
                       </TableCell>
                       <TableCell className="text-center pr-4">
                         <div className="flex items-center justify-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
-                            onClick={() => setSelectedAtt(r)}
-                            title="Detail"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
-                            onClick={() => {
-                              setEditingAtt(r)
-                              setEditAttForm({
-                                check_in: r.check_in ? new Date(r.check_in).toTimeString().slice(0,5) : '',
-                                check_out: r.check_out ? new Date(r.check_out).toTimeString().slice(0,5) : '',
-                                break_start: r.break_start ? new Date(r.break_start).toTimeString().slice(0,5) : '',
-                                break_end: r.break_end ? new Date(r.break_end).toTimeString().slice(0,5) : '',
-                                status: r.status,
-                                notes: r.notes ?? '',
-                                overtime_in: r.overtime_check_in ? new Date(r.overtime_check_in).toTimeString().slice(0,5) : '',
-                                overtime_out: r.overtime_check_out ? new Date(r.overtime_check_out).toTimeString().slice(0,5) : '',
-                              })
-                            }}
-                            title="Edit"
-                          >
-                            <Edit2 className="h-4 w-4" />
-                          </Button>
+                          {(() => {
+                            // Aktif: tanggal <= hari ini DAN status bukan '-' (virtual row masa depan)
+                            const isFuture = r.date > todayStr
+                            const isVirtualNoData = r.status === '-' && !isFuture
+                            const disablePreview = isFuture || (r.status === '-' && !r.check_in)
+                            const disableEdit = isFuture
+                            return (
+                              <>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+                                  onClick={() => setSelectedAtt(r)}
+                                  title="Detail"
+                                  disabled={disablePreview}
+                                >
+                                  <Eye className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="icon"
+                                  className="h-8 w-8 text-slate-500 hover:text-slate-700 hover:bg-slate-100"
+                                  disabled={disableEdit}
+                                  onClick={() => {
+                                    setEditingAtt(r)
+                                    setEditAttForm({
+                                      check_in: r.check_in ? new Date(r.check_in).toTimeString().slice(0,5) : '',
+                                      check_out: r.check_out ? new Date(r.check_out).toTimeString().slice(0,5) : '',
+                                      break_start: r.break_start ? new Date(r.break_start).toTimeString().slice(0,5) : '',
+                                      break_end: r.break_end ? new Date(r.break_end).toTimeString().slice(0,5) : '',
+                                      status: r.status,
+                                      notes: r.notes ?? '',
+                                      overtime_in: r.overtime_check_in ? new Date(r.overtime_check_in).toTimeString().slice(0,5) : '',
+                                      overtime_out: r.overtime_check_out ? new Date(r.overtime_check_out).toTimeString().slice(0,5) : '',
+                                      shift_id: shifts.find((s: any) => s.name === r.shift_name)?.id ?? '',
+                                    })
+                                  }}
+                                  title="Edit"
+                                >
+                                  <Edit2 className="h-4 w-4" />
+                                </Button>
+                              </>
+                            )
+                          })()}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -1743,26 +2094,24 @@ export default function ManagementEmployeePage() {
             </Table>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-center justify-between p-4 border-t border-slate-100 gap-4">
+          <div className="flex items-center justify-end p-4 border-t border-slate-100 gap-3">
             <p className="text-xs text-slate-500">
-              Menampilkan {Math.min((attPage - 1) * PAGE_SIZE + 1, attTotal || 0)} - {Math.min(attPage * PAGE_SIZE, attTotal || 0)} dari {attTotal || 0} entri
+              Menampilkan {attTotal === 0 ? 0 : Math.min((attPage - 1) * PAGE_SIZE + 1, attTotal)} - {Math.min(attPage * PAGE_SIZE, attTotal || 0)} dari {attTotal || 0} entri
             </p>
-            <div className="flex items-center gap-1">
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setAttPage(p => Math.max(1, p - 1))} disabled={attPage === 1}>
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              {Array.from({ length: Math.min(5, attTotalPages || 1) }, (_, i) => {
-                const p = i + 1
-                return (
-                  <Button key={p} variant={attPage === p ? 'default' : 'outline'} size="sm" className={`h-8 w-8 ${attPage === p ? 'bg-blue-500' : ''}`} onClick={() => setAttPage(p)}>
-                    {p}
-                  </Button>
-                )
-              })}
-              <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setAttPage(p => Math.min(attTotalPages, p + 1))} disabled={attPage >= attTotalPages}>
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+            <button
+              onClick={() => setAttPage(p => Math.max(1, p - 1))}
+              disabled={attPage === 1}
+              className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all text-sm font-medium"
+            >
+              &lt;
+            </button>
+            <button
+              onClick={() => setAttPage(p => Math.min(attTotalPages, p + 1))}
+              disabled={attPage >= attTotalPages}
+              className="w-9 h-9 flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-all text-sm font-medium"
+            >
+              &gt;
+            </button>
           </div>
         </CardContent>
       </Card>
@@ -1775,7 +2124,7 @@ export default function ManagementEmployeePage() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm overflow-y-auto py-6 px-4"
-            onClick={e => { if (e.target === e.currentTarget) { setShowJadwalModal(false); setJadwalMenu('') } }}
+            onClick={e => { if (e.target === e.currentTarget) closeJadwalModal() }}
           >
             <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
@@ -1790,7 +2139,7 @@ export default function ManagementEmployeePage() {
                   <h2 className="text-lg font-bold text-slate-800">Perubahan Jadwal</h2>
                 </div>
                 <button
-                  onClick={() => { setShowJadwalModal(false); setJadwalMenu('') }}
+                  onClick={() => closeJadwalModal()}
                   className="w-8 h-8 flex items-center justify-center rounded-full bg-slate-100 text-slate-500 hover:bg-red-50 hover:text-red-500 transition-all"
                 >
                   <X className="w-4 h-4" />
@@ -1810,6 +2159,7 @@ export default function ManagementEmployeePage() {
                   <option value="atur_off">Off Day</option>
                   <option value="lembur">Lembur</option>
                   <option value="ganti_off">Ganti Off</option>
+                  <option value="" disabled style={{ color: '#94A3B8' }}>Cuti (Segera Hadir)</option>
                 </select>
               </div>
 
@@ -1830,7 +2180,7 @@ export default function ManagementEmployeePage() {
                           >
                             <option value="" disabled>Pilih Karyawan</option>
                             {users.filter(u => u.role.toLowerCase() !== 'superadmin').map(u => (
-                              <option key={u.id} value={u.id}>{u.name} ({u.nip !== '—' ? u.nip : u.role})</option>
+                              <option key={u.id} value={u.id}>{u.name} — shift: {u.current_shift || '—'}</option>
                             ))}
                           </select>
                         </div>
@@ -1843,29 +2193,48 @@ export default function ManagementEmployeePage() {
                             className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
                           />
                         </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1">Shift Baru <span className="text-red-500">*</span></label>
-                          <select
-                            value={shiftForm.shiftId}
-                            onChange={e => setShiftForm(f => ({ ...f, shiftId: e.target.value }))}
-                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
-                          >
-                            <option value="" disabled>Pilih Shift Baru</option>
-                            {shifts.map((s: any) => <option key={s.id} value={s.id}>{s.name}</option>)}
-                            {shiftForm.shiftType === 'single' && <option value="none">Tanpa Shift</option>}
-                          </select>
-                        </div>
-                        <div>
-                          <label className="block text-sm font-semibold text-slate-700 mb-1">Keterangan</label>
-                          <input
-                            type="text"
-                            placeholder="Alasan lembur / perubahan shift..."
-                            value={shiftForm.keterangan}
-                            onChange={e => setShiftForm(f => ({ ...f, keterangan: e.target.value }))}
-                            className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
-                          />
-                        </div>
                       </div>
+
+                      {/* Tukar dengan Karyawan (opsional) */}
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">
+                          Tukar Shift dengan Karyawan
+                          <span className="text-slate-400 font-normal ml-1">(opsional)</span>
+                        </label>
+                        <select
+                          value={swapTargetUserId}
+                          onChange={e => setSwapTargetUserId(e.target.value)}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800"
+                        >
+                          <option value="">-- Tidak Tukar --</option>
+                          {users.filter(u => u.role.toLowerCase() !== 'superadmin' && u.id !== shiftForm.userId).map(u => (
+                            <option key={u.id} value={u.id}>{u.name} — shift: {u.current_shift || '—'}</option>
+                          ))}
+                        </select>
+                        {swapTargetUserId && shiftForm.userId && (() => {
+                          const userA = users.find(u => u.id === shiftForm.userId)
+                          const userB = users.find(u => u.id === swapTargetUserId)
+                          if (!userA || !userB) return null
+                          return (
+                            <div className="mt-2 px-3 py-2 bg-blue-50 border border-blue-100 rounded-lg text-xs text-blue-700">
+                              <span className="font-semibold">{userA.name}</span> ({userA.current_shift || '—'}) akan mendapat shift <span className="font-semibold">{userB.current_shift || '—'}</span>, dan <span className="font-semibold">{userB.name}</span> akan mendapat shift <span className="font-semibold">{userA.current_shift || '—'}</span>.
+                            </div>
+                          )
+                        })()}
+                      </div>
+
+                      {/* Keterangan — textarea penuh di bawah */}
+                      <div>
+                        <label className="block text-sm font-semibold text-slate-700 mb-1">Keterangan</label>
+                        <textarea
+                          rows={4}
+                          placeholder="Tulis alasan perubahan shift atau catatan tambahan..."
+                          value={shiftForm.keterangan}
+                          onChange={e => setShiftForm(f => ({ ...f, keterangan: e.target.value }))}
+                          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-800 resize-none"
+                        />
+                      </div>
+
                       <button
                         type="submit"
                         disabled={updateShiftMutation.isPending || assignOvertimeMutation.isPending}
@@ -2784,6 +3153,22 @@ export default function ManagementEmployeePage() {
                   }).eq('id', editingAtt.id)
                   if (error) throw error
 
+                  // 1b. Jika shift_id diisi, update user_shifts
+                  if (editAttForm.shift_id) {
+                    const { data: existingShift } = await supabase
+                      .from('user_shifts')
+                      .select('id')
+                      .eq('user_id', editingAtt.user_id)
+                      .eq('effective_date', editingAtt.date)
+                      .maybeSingle()
+
+                    if (existingShift) {
+                      await supabase.from('user_shifts').update({ shift_id: editAttForm.shift_id }).eq('id', existingShift.id)
+                    } else {
+                      await supabase.from('user_shifts').insert({ user_id: editingAtt.user_id, shift_id: editAttForm.shift_id, effective_date: editingAtt.date })
+                    }
+                  }
+
                   // 2. If double shift, also update overtime_assignments
                   if (editingAtt.shift_type === 'double') {
                     const { data: existingOT } = await supabase
@@ -2827,6 +3212,26 @@ export default function ManagementEmployeePage() {
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Tanggal</label>
                     <input value={formatDate(editingAtt.date)} readOnly style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#64748B', background: '#F8FAFC', boxSizing: 'border-box' }} />
                   </div>
+                </div>
+
+                {/* Dropdown Shift */}
+                <div style={{ marginTop: '16px' }}>
+                  <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Shift</label>
+                  <select
+                    value={editAttForm.shift_id}
+                    onChange={e => setEditAttForm(f => ({ ...f, shift_id: e.target.value }))}
+                    style={{ width: '100%', padding: '10px 14px', border: '1px solid #E2E8F0', borderRadius: '8px', fontSize: '14px', color: '#0F172A', background: '#FFFFFF', outline: 'none' }}
+                    onFocus={e => { e.currentTarget.style.border = '1px solid #3B82F6'; e.currentTarget.style.boxShadow = '0 0 0 3px rgba(59,130,246,0.1)' }}
+                    onBlur={e => { e.currentTarget.style.border = '1px solid #E2E8F0'; e.currentTarget.style.boxShadow = 'none' }}
+                  >
+                    <option value="">-- Pilih Shift (opsional) --</option>
+                    {shifts.map((s: any) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px', marginTop: '16px' }}>
                   {/* Jam Masuk */}
                   <div>
                     <label style={{ display: 'block', fontSize: '13px', fontWeight: '500', color: '#475569', marginBottom: '4px' }}>Jam Masuk</label>
@@ -2876,6 +3281,7 @@ export default function ManagementEmployeePage() {
                     <option value="izin">Izin</option>
                     <option value="absen">Absen</option>
                     <option value="cuti">Cuti</option>
+                    <option value="cuti_segera" disabled style={{ color: '#94A3B8' }}>Cuti (Segera Hadir)</option>
                   </select>
                   {editAttForm.check_in && (editAttForm.status === 'hadir' || editAttForm.status === 'terlambat') && shifts.find((s: any) => s.name === editingAtt.shift_name)?.start_time && (
                     <p style={{ fontSize: '11px', color: '#64748B', marginTop: '4px' }}>
