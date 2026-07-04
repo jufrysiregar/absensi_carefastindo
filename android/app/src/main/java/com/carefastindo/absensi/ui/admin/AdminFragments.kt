@@ -1645,13 +1645,22 @@ class TabSalarySlipFragment : Fragment() {
 
                 salaryItems.clear()
                 for (emp in employees) {
+                    // Hitung range: dari 1 bulan target sampai 1 bulan berikutnya
+                    val monthInt = targetMonth.toInt()
+                    val yearInt = targetYear.toInt()
+                    val nextMonth = if (monthInt == 12) 1 else monthInt + 1
+                    val nextYear = if (monthInt == 12) yearInt + 1 else yearInt
+                    val dateFrom = "$targetYear-${String.format("%02d", monthInt)}-01"
+                    val dateTo   = "$nextYear-${String.format("%02d", nextMonth)}-01"
+
                     // Fetch attendance logs for that employee & month
                     val atts = withContext(Dispatchers.IO) {
                         SupabaseClient.db.from("attendance")
                             .select {
                                 filter {
                                     eq("user_id", emp.id)
-                                    like("date", "$targetYear-$targetMonth%")
+                                    gte("date", dateFrom)
+                                    lt("date", dateTo)
                                 }
                             }.decodeList<Attendance>()
                     }
@@ -1665,7 +1674,8 @@ class TabSalarySlipFragment : Fragment() {
                                 filter {
                                     eq("user_id", emp.id)
                                     eq("status", "approved")
-                                    like("start_date", "$targetYear-$targetMonth%")
+                                    gte("start_date", dateFrom)
+                                    lt("start_date", dateTo)
                                 }
                             }.decodeList<LeaveRequest>()
                     }
@@ -1678,7 +1688,8 @@ class TabSalarySlipFragment : Fragment() {
                             .select {
                                 filter {
                                     eq("user_id", emp.id)
-                                    like("off_date", "$targetYear-$targetMonth%")
+                                    gte("off_date", dateFrom)
+                                    lt("off_date", dateTo)
                                 }
                             }.decodeList<OffSchedule>()
                     }
@@ -1690,7 +1701,8 @@ class TabSalarySlipFragment : Fragment() {
                                 filter {
                                     eq("assigned_user_id", emp.id)
                                     eq("reason", "lembur")
-                                    like("target_date", "$targetYear-$targetMonth%")
+                                    gte("target_date", dateFrom)
+                                    lt("target_date", dateTo)
                                 }
                             }.decodeList<EmergencyAssignment>()
                     }
