@@ -54,10 +54,15 @@ object ShiftHelper {
         }
         val clean = shiftType?.lowercase()
         return when {
+            // Nama baru: Shift I / II / III
+            clean == "shift i" || clean == "i"   -> Pair("07:00", "15:00")
+            clean == "shift ii" || clean == "ii"  -> Pair("15:00", "23:00")
+            clean == "shift iii" || clean == "iii" -> Pair("23:00", "07:00")
+            clean == "shift kantor" || clean == "kantor" -> Pair("08:00", "17:00")
+            // Nama lama (legacy fallback): pagi/sore/malam
             clean == "pagi" || clean == "shift 1" -> Pair("07:00", "15:00")
             clean == "sore" || clean == "shift 2" -> Pair("15:00", "23:00")
             clean == "malam" || clean == "shift 3" -> Pair("23:00", "07:00")
-            clean == "shift kantor" || clean == "kantor" -> Pair("08:00", "17:00")
             role == ROLE_SPV || role.equals("supervisor", ignoreCase = true) || role.equals("Kantor", ignoreCase = true) -> Pair("08:00", "17:00")
             else -> Pair("08:00", "17:00")
         }
@@ -66,10 +71,10 @@ object ShiftHelper {
     fun getDefaultBreakStart(shiftType: String?): String {
         val clean = shiftType?.lowercase()
         return when {
-            clean == "pagi" || clean == "shift 1" -> "11:00"
-            clean == "sore" || clean == "shift 2" -> "18:00"
-            clean == "malam" || clean == "shift 3" -> "02:00"
-            else -> "12:00" // Default break
+            clean == "shift i"   || clean == "i"   || clean == "pagi"  || clean == "shift 1" -> "11:00"
+            clean == "shift ii"  || clean == "ii"  || clean == "sore"  || clean == "shift 2" -> "18:00"
+            clean == "shift iii" || clean == "iii" || clean == "malam" || clean == "shift 3" -> "02:00"
+            else -> "12:00"
         }
     }
 
@@ -84,7 +89,7 @@ object ShiftHelper {
         val cal = Calendar.getInstance()
         val clean = shiftType?.lowercase()
         
-        val isNightShift = clean == "malam" || clean == "shift 3"
+        val isNightShift = clean == "shift iii" || clean == "iii" || clean == "malam" || clean == "shift 3"
         val isSpvOrOffice = role == ROLE_SPV || role.equals("supervisor", ignoreCase = true) || role.equals("Kantor", ignoreCase = true)
         
         if (!isSpvOrOffice && isNightShift) {

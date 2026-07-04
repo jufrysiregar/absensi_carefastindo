@@ -31,7 +31,7 @@ if (typeof window !== 'undefined' && pdfFonts && (pdfFonts as any).pdfMake) {
 interface DailyReport {
   id: string
   report_date: string
-  shift: string // Shift 1, 2, 3, Kantor
+  shift: string // Shift I, II, III, Kantor
   title: string
   area: string
   officer_name: string
@@ -352,7 +352,7 @@ export default function ReportsPage() {
   const [showDailyForm, setShowDailyForm] = useState(false)
   const [editingDaily, setEditingDaily] = useState<DailyReport | null>(null)
   const [dailyForm, setDailyForm] = useState({
-    title: '', area: '', officer_name: '', job_description: '', report_date: todayStr, shift: 'Shift 1',
+    title: '', area: '', officer_name: '', job_description: '', report_date: todayStr, shift: 'Shift I',
   })
   const [tempPhotos, setTempPhotos] = useState<{ file?: File; url: string }[]>([])
   const [uploadingPhotos, setUploadingPhotos] = useState(false)
@@ -547,7 +547,7 @@ export default function ReportsPage() {
   }
 
   function resetDailyForm() {
-    setDailyForm({ title: '', area: '', officer_name: '', job_description: '', report_date: todayStr, shift: 'Shift 1' })
+    setDailyForm({ title: '', area: '', officer_name: '', job_description: '', report_date: todayStr, shift: 'Shift I' })
     setEditingDaily(null)
     setTempPhotos([])
     setShowDailyForm(false)
@@ -565,7 +565,7 @@ export default function ReportsPage() {
     setDailyForm({
       title: '', area: '', officer_name: '', job_description: '',
       report_date: dailyFilterType === 'harian' ? dailyFilterDate : todayStr,
-      shift: dailyFilterShift !== 'all' ? dailyFilterShift : 'Shift 1'
+      shift: dailyFilterShift !== 'all' ? dailyFilterShift : 'Shift I'
     })
     setTempPhotos([])
     setShowDailyForm(true)
