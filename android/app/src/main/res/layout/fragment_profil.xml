@@ -73,7 +73,7 @@
                         android:layout_height="wrap_content"
                         android:orientation="vertical">
 
-                        <!-- Employee Code -->
+                        <!-- NIP -->
                         <RelativeLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -81,7 +81,7 @@
                             <TextView
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
-                                android:text="ID Pegawai"
+                                android:text="NIP"
                                 android:textColor="@color/text_secondary_light"
                                 android:textSize="14sp" />
                             <TextView
@@ -89,7 +89,7 @@
                                 android:layout_width="wrap_content"
                                 android:layout_height="wrap_content"
                                 android:layout_alignParentEnd="true"
-                                android:text="CF0001"
+                                android:text="--"
                                 android:textColor="@color/text_primary_light"
                                 android:textSize="14sp"
                                 android:textStyle="bold" />
@@ -225,19 +225,6 @@
                         android:text="Ganti Kata Sandi"
                         android:textColor="@color/primary"
                         app:icon="@android:drawable/ic_lock_idle_lock"
-                        app:cornerRadius="10dp"
-                        android:layout_marginBottom="12dp"
-                        android:textStyle="bold" />
-
-                    <!-- Tentang Aplikasi Button -->
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/btnTentangAplikasi"
-                        style="@style/Widget.Material3.Button.ElevatedButton"
-                        android:layout_width="match_parent"
-                        android:layout_height="50dp"
-                        android:text="Tentang Aplikasi"
-                        android:textColor="@color/primary"
-                        app:icon="@android:drawable/ic_dialog_info"
                         app:cornerRadius="10dp"
                         android:layout_marginBottom="12dp"
                         android:textStyle="bold" />
