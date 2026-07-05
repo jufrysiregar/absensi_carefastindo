@@ -626,21 +626,24 @@ export default function ManagementEmployeePage() {
 
       // 4. Fetch shift aktif per user (shift default mereka) — exclude off dan profile_edit
       // PENTING: neq tidak return NULL rows di Supabase, jadi ambil semua lalu filter di client
-      const { data: defaultShifts } = await supabase
-        .from('user_shifts')
-        .select('user_id, created_at, shift_type, shifts(name)')
-        .not('shift_id', 'is', null)
-        .order('created_at', { ascending: false })
-
+      // Untuk bulan depan (Agustus ke atas): defaultShiftMap kosong — shift tampil "—"
       const defaultShiftMap: Record<string, string> = {}
-      // Ambil row terbaru per user, exclude off dan profile_edit
-      ;(defaultShifts ?? [])
-        .filter((us: any) => us.shift_type !== 'off' && us.shift_type !== 'profile_edit')
-        .forEach((us: any) => {
-          if (!defaultShiftMap[us.user_id]) {
-            defaultShiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
-          }
-        })
+      if (!isFutureMonth) {
+        const { data: defaultShifts } = await supabase
+          .from('user_shifts')
+          .select('user_id, created_at, shift_type, shifts(name)')
+          .not('shift_id', 'is', null)
+          .order('created_at', { ascending: false })
+
+        // Ambil row terbaru per user, exclude off dan profile_edit
+        ;(defaultShifts ?? [])
+          .filter((us: any) => us.shift_type !== 'off' && us.shift_type !== 'profile_edit')
+          .forEach((us: any) => {
+            if (!defaultShiftMap[us.user_id]) {
+              defaultShiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
+            }
+          })
+      }
 
       // 5. Fetch overtime untuk tanggal ini
       const { data: otData } = await supabase
