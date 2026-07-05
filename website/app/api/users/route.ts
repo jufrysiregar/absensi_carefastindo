@@ -8,7 +8,7 @@ export async function POST(request: Request) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
-    const { name, email, password, role, nip, shiftId } = await request.json()
+    const { name, email, password, role, nip } = await request.json()
 
     if (!name || !email || !password || !role || !nip) {
       return NextResponse.json({ error: 'Mohon lengkapi semua field wajib!' }, { status: 400 })
@@ -46,18 +46,6 @@ export async function POST(request: Request) {
       // rollback auth user creation
       await supabaseAdmin.auth.admin.deleteUser(userId)
       return NextResponse.json({ error: userError.message }, { status: 400 })
-    }
-
-    // 3. Insert into user_shifts
-    if (shiftId) {
-      const { error: shiftError } = await supabaseAdmin.from('user_shifts').insert({
-        user_id: userId,
-        shift_id: shiftId,
-        effective_date: new Date().toISOString().split('T')[0]
-      })
-      if (shiftError) {
-        console.error('Failed to assign initial user shift:', shiftError.message)
-      }
     }
 
     return NextResponse.json({ success: true, userId })
