@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -1584,7 +1585,7 @@ export default function ManagementEmployeePage() {
       }
 
       toast.dismiss()
-      // @ts-ignore
+      // @ts-expect-error pdfmake typings do not cover this generated document shape
       pdfMake.createPdf(docDefinition).download(`laporan_absensi_${year}_${String(month + 1).padStart(2, '0')}.pdf`)
       toast.success('PDF berhasil diekspor!')
     } catch (err: any) {

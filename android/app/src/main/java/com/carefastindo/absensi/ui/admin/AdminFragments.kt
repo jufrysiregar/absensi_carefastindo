@@ -2684,7 +2684,7 @@ class TabScheduleHistoryFragment : Fragment() {
                 }
             } catch (e: Exception) {
                 content.removeAllViews()
-                content.addView(TextView(requireContext()).apply { text = "Gagal memuat riwayat: ${e.localizedMessage}"; textSize = 14f })
+                content.addView(TextView(requireContext()).apply { text = "Gagal memuat riwayat perubahan jadwal. Silakan coba lagi nanti."; textSize = 14f })
             } finally {
                 loading.visibility = View.GONE
             }
@@ -2714,11 +2714,7 @@ class TabScheduleHistoryFragment : Fragment() {
             val detail = if (item.reason == "ganti_off") "Ganti off dengan $replacing" else "Lembur"
             result.add("${item.targetDate}\n$title - $assigned\n$detail")
         }
-        SupabaseClient.db.from("overtime_assignments").select().decodeList<OvertimeAssignment>().forEach { item ->
-            val user = users[item.userId]?.name ?: "Pegawai"
-            val shift = shifts[item.shiftId]?.name ?: "-"
-            result.add("${item.assignmentDate}\nLembur - $user\n$shift")
-        }
+
         result.sortedDescending()
     }
 

@@ -257,18 +257,6 @@ class JadwalFragment : Fragment() {
                     SupabaseClient.db.from("users").select().decodeList<User>().associateBy { it.id }
                 }
 
-                val hasAnySchedule = monthShiftEntries.isNotEmpty() || attByDate.isNotEmpty() || offDates.isNotEmpty() ||
-                    leaveList.isNotEmpty() || emergencyList.isNotEmpty() || overtimeList.isNotEmpty()
-
-                if (!hasAnySchedule) {
-                    withContext(Dispatchers.Main) {
-                        txtShiftInfo.text = ""
-                        days.clear()
-                        adapter.notifyDataSetChanged()
-                        showEmpty()
-                    }
-                    return@launch
-                }
 
                 withContext(Dispatchers.Main) {
                     val todayShift = if (todayStr in firstDayStr..lastDayStr && todayStr !in offDates) shiftForDate(todayStr) else null

@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 'use client'
 
 import { useEffect, useState } from 'react'
@@ -131,7 +132,7 @@ export default function DashboardPage() {
       const userIds = [...new Set(rows.map((r: any) => r.user_id))]
 
       // Fetch shift names
-      let shiftMap: Record<string, string> = {}
+      const shiftMap: Record<string, string> = {}
       if (userIds.length > 0) {
         const { data: usData } = await supabase
           .from('user_shifts')
@@ -147,7 +148,7 @@ export default function DashboardPage() {
       }
 
       // Fetch overtime
-      let otMap: Record<string, { check_in: string | null; check_out: string | null }> = {}
+      const otMap: Record<string, { check_in: string | null; check_out: string | null }> = {}
       if (userIds.length > 0) {
         const { data: otData } = await supabase
           .from('overtime_assignments')
@@ -250,13 +251,7 @@ export default function DashboardPage() {
     }
   })
 
-  useEffect(() => {
-    if (activeShifts.length > 0 && !selectedShiftId) {
-      setSelectedShiftId(activeShifts[0].id)
-    } else if (shifts.length > 0 && !selectedShiftId) {
-      setSelectedShiftId(shifts[0].id)
-    }
-  }, [shifts, activeShifts, selectedShiftId])
+  const effectiveSelectedShiftId = selectedShiftId ?? activeShifts[0]?.id ?? shifts[0]?.id ?? null
 
   useEffect(() => {
     if (dbActiveQRs) {
@@ -476,7 +471,7 @@ export default function DashboardPage() {
             </CardTitle>
             {shifts.length > 0 && (
               <select
-                value={selectedShiftId || ''}
+                value={effectiveSelectedShiftId || ''}
                 onChange={e => setSelectedShiftId(e.target.value)}
                 className="text-xs border border-slate-200 rounded p-1 outline-none bg-white text-slate-700 font-medium"
               >
@@ -493,7 +488,7 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent className="flex flex-col items-center justify-center p-6 h-[250px]">
             {(() => {
-              const currentShift = shifts.find(s => s.id === selectedShiftId)
+              const currentShift = shifts.find(s => s.id === effectiveSelectedShiftId)
               if (!currentShift) return <Skeleton className="w-32 h-32 rounded-lg" />
 
               const qrImage = qrImages[currentShift.id]
