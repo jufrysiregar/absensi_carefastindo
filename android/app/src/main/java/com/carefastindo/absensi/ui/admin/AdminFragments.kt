@@ -1195,6 +1195,7 @@ class TabEmployeeCrudFragment : Fragment() {
         val edtEmail = dialogView.findViewById<EditText>(R.id.edtEmail)
         val edtPassword = dialogView.findViewById<EditText>(R.id.edtPassword)
         val spinRole = dialogView.findViewById<Spinner>(R.id.spinRole)
+        val txtShiftLabel = dialogView.findViewById<TextView>(R.id.txtShiftLabel)
         val spinShift = dialogView.findViewById<Spinner>(R.id.spinShift)
 
         // Dropdown setup
