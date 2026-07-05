@@ -550,16 +550,56 @@ export default function ManagementEmployeePage() {
       const attMap: Record<string, any> = {}
       ;(attData ?? []).forEach((r: any) => { attMap[r.user_id] = r })
 
-      // 3. Fetch user_shifts untuk tanggal ini — ambil semua row s/d targetDate
-      // Logika: shift berlaku 1 bulan. Untuk tiap user, pakai shift terakhir
-      // dengan effective_date <= targetDate (bukan exact match)
-      const { data: userShiftsData } = await supabase
-        .from('user_shifts')
-        .select('user_id, shift_type, effective_date, shifts(id, name)')
-        .lte('effective_date', targetDate)
-        .order('effective_date', { ascending: false })
+      // 3. Fetch user_shifts untuk tanggal ini
+      // Logika shift bulanan:
+      // - Bulan ini dan sebelumnya: pakai shift terakhir dengan effective_date <= targetDate
+      //   TAPI hanya dalam bulan yang SAMA dengan targetDate (tidak inherit dari bulan sebelumnya)
+      // - Bulan depan ke atas: tidak ada shift (admin belum set)
+      const targetMonth = targetDate.substring(0, 7) // "YYYY-MM"
+      const firstDayOfTargetMonth = `${targetMonth}-01`
+      const today = new Date().toISOString().split('T')[0]
+      const currentMonth = today.substring(0, 7)
+
+      // Hanya fetch shift jika targetDate <= bulan ini (bukan bulan depan ke atas)
+      const isFutureMonth = targetMonth > currentMonth
+
+      let userShiftsData: any[] = []
+      if (!isFutureMonth) {
+        // Ambil shift yang effective_date ada di bulan targetDate
+        // (shift berlaku 1 bulan — set di awal bulan berlaku seluruh bulan itu)
+        const { data } = await supabase
+          .from('user_shifts')
+          .select('user_id, shift_type, effective_date, shifts(id, name)')
+          .gte('effective_date', firstDayOfTargetMonth)
+          .lte('effective_date', targetDate)
+          .order('effective_date', { ascending: false })
+        userShiftsData = data ?? []
+
+        // Jika tidak ada shift di bulan ini, fallback ke shift terakhir sebelum bulan ini
+        // (untuk karyawan yang shiftnya belum di-reset bulan ini)
+        const usersWithShift = new Set(userShiftsData.map((us: any) => us.user_id))
+        const { data: allUsers2 } = await supabase
+          .from('users')
+          .select('id')
+          .eq('is_active', true)
+          .neq('role', 'superadmin')
+        const usersWithoutShift = (allUsers2 ?? [])
+          .filter((u: any) => !usersWithShift.has(u.id))
+          .map((u: any) => u.id)
+
+        if (usersWithoutShift.length > 0) {
+          const { data: fallbackShifts } = await supabase
+            .from('user_shifts')
+            .select('user_id, shift_type, effective_date, shifts(id, name)')
+            .lt('effective_date', firstDayOfTargetMonth)
+            .in('user_id', usersWithoutShift)
+            .order('effective_date', { ascending: false })
+          userShiftsData = [...userShiftsData, ...(fallbackShifts ?? [])]
+        }
+      }
 
       // Untuk tiap user, ambil row pertama (effective_date terbaru <= targetDate)
+      // Skip row dengan shift_type = 'off' atau 'profile_edit' untuk map shift aktif
       const userShiftMap: Record<string, { shift_name: string; shift_type: string | null }> = {}
       ;(userShiftsData ?? []).forEach((us: any) => {
         if (!userShiftMap[us.user_id]) {
@@ -617,8 +657,9 @@ export default function ManagementEmployeePage() {
         const att = attMap[u.id]
         const shiftOverride = userShiftMap[u.id]
         // off bisa dari user_shifts (shift_type='off') ATAU off_schedules (dari Android)
+        // TAPI jika sudah ada attendance record → attendance menang (admin sudah koreksi)
         const isOffFromAndroid = offScheduleUserIds.has(u.id)
-        const isOff = shiftOverride?.shift_type === 'off' || isOffFromAndroid
+        const isOff = !att && (shiftOverride?.shift_type === 'off' || isOffFromAndroid)
         const shiftName = isOff
           ? 'Off' 
           : (shiftOverride?.shift_name && shiftOverride.shift_name !== '—' 
@@ -3213,7 +3254,9 @@ export default function ManagementEmployeePage() {
                   }
 
                   toast.success('Data absensi berhasil diperbarui!')
-                  queryClient.invalidateQueries({ queryKey: ['attendance'] })
+                  // Force refetch dengan invalidate semua variant query attendance
+                  await queryClient.invalidateQueries({ queryKey: ['attendance'], refetchType: 'all' })
+                  await queryClient.refetchQueries({ queryKey: ['attendance'] })
                   setEditingAtt(null)
                 } catch (err: any) {
                   toast.error(err.message || 'Gagal menyimpan perubahan')
