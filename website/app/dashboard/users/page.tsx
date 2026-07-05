@@ -2041,7 +2041,10 @@ export default function ManagementEmployeePage() {
                             const isFuture = r.date > todayStr
                             const isVirtualNoData = r.status === '-' && !isFuture
                             const disablePreview = isFuture || (r.status === '-' && !r.check_in)
-                            const disableEdit = isFuture
+                            // Edit aktif: bulan ini dan bulan-bulan lalu. Disabled: bulan depan ke atas
+                            const rowMonth = r.date.substring(0, 7) // "YYYY-MM"
+                            const currentMonth = todayStr.substring(0, 7)
+                            const disableEdit = rowMonth > currentMonth
                             return (
                               <>
                                 <Button
