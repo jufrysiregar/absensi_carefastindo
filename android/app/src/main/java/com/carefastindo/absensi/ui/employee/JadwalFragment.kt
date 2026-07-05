@@ -303,8 +303,20 @@ class JadwalFragment : Fragment() {
                 val overtimeByDate = overtimeList.associateBy { it.assignmentDate }
 
                 // ── 7. Tentukan apakah ada jadwal bulan ini ───────────
-                // Ada jika: ada history shift_id valid ATAU ada default shift
-                val hasAnySchedule = shiftHistory.isNotEmpty() || defaultShift != null
+                // Logika:
+                // - Bulan ini dan sebelumnya: ada jadwal jika ada shift history,
+                //   defaultShift, ATAU ada data attendance di bulan itu
+                // - Bulan depan ke atas: tidak ada jadwal (belum ditentukan)
+                val selectedMonthStr = String.format("%04d-%02d", selectedYear, selectedMonth + 1)
+                val todayMonthStr    = dateFmt.format(Calendar.getInstance().time).substring(0, 7)
+                val isFutureMonth    = selectedMonthStr > todayMonthStr
+
+                val hasAttendanceData = attByDate.isNotEmpty()
+                val hasAnySchedule = if (isFutureMonth) {
+                    false // Bulan depan → selalu "belum ditentukan"
+                } else {
+                    shiftHistory.isNotEmpty() || defaultShift != null || hasAttendanceData
+                }
 
                 // ── 8. Build list per hari ────────────────────────────
                 val iterCal = Calendar.getInstance()

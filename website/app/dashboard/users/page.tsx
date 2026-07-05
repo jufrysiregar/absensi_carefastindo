@@ -588,13 +588,17 @@ export default function ManagementEmployeePage() {
           .map((u: any) => u.id)
 
         if (usersWithoutShift.length > 0) {
-          const { data: fallbackShifts } = await supabase
-            .from('user_shifts')
-            .select('user_id, shift_type, effective_date, shifts(id, name)')
-            .lt('effective_date', firstDayOfTargetMonth)
-            .in('user_id', usersWithoutShift)
-            .order('effective_date', { ascending: false })
-          userShiftsData = [...userShiftsData, ...(fallbackShifts ?? [])]
+          // Fallback hanya untuk bulan saat ini — bulan depan tidak inherit shift
+          if (targetMonth === currentMonth) {
+            const { data: fallbackShifts } = await supabase
+              .from('user_shifts')
+              .select('user_id, shift_type, effective_date, shifts(id, name)')
+              .lt('effective_date', firstDayOfTargetMonth)
+              .in('user_id', usersWithoutShift)
+              .order('effective_date', { ascending: false })
+            userShiftsData = [...userShiftsData, ...(fallbackShifts ?? [])]
+          }
+          // Bulan depan (Agustus ke atas): tidak ada fallback — tampil "—"
         }
       }
 
