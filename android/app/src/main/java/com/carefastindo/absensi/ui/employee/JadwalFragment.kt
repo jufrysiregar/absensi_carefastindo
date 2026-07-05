@@ -46,6 +46,13 @@ class JadwalFragment : Fragment() {
     private var selectedYear = Calendar.getInstance().get(Calendar.YEAR)
     private var selectedMonth = Calendar.getInstance().get(Calendar.MONTH) // 0-indexed
     private var isSpinnerReady = false
+    private val currentYear = Calendar.getInstance().get(Calendar.YEAR)
+    private val years: Array<String> by lazy {
+        // Dari 2023 sampai 2 tahun ke depan
+        val start = 2023
+        val end   = currentYear + 2
+        (start..end).map { it.toString() }.toTypedArray()
+    }
 
     // ── Locale ──────────────────────────────────────────────────
     private val idLocale = Locale("id", "ID")
@@ -112,13 +119,7 @@ class JadwalFragment : Fragment() {
         monthAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinMonth.adapter = monthAdapter
 
-        // Tahun: tahun lalu, tahun ini, tahun depan
-        val currentYear = Calendar.getInstance().get(Calendar.YEAR)
-        val years = arrayOf(
-            (currentYear - 1).toString(),
-            currentYear.toString(),
-            (currentYear + 1).toString()
-        )
+        // Tahun: pakai field years yang sudah didefinisikan di class
         val yearAdapter = ArrayAdapter(
             requireContext(),
             android.R.layout.simple_spinner_item,
@@ -127,26 +128,26 @@ class JadwalFragment : Fragment() {
         yearAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
         spinYear.adapter = yearAdapter
 
+        // Pasang listener SEBELUM setSelection agar tidak salah trigger
+        val listener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                if (!isSpinnerReady) return
+                selectedMonth = spinMonth.selectedItemPosition
+                selectedYear  = years[spinYear.selectedItemPosition].toInt()
+                loadJadwal()
+            }
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
+        spinMonth.onItemSelectedListener = listener
+        spinYear.onItemSelectedListener  = listener
+
         // Set default ke bulan & tahun sekarang
         spinMonth.setSelection(selectedMonth)
         spinYear.setSelection(years.indexOf(currentYear.toString()).takeIf { it >= 0 } ?: 1)
 
         isSpinnerReady = true
 
-        val listener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (!isSpinnerReady) return
-                selectedMonth = spinMonth.selectedItemPosition
-                selectedYear = years[spinYear.selectedItemPosition].toInt()
-                loadJadwal()
-            }
-            override fun onNothingSelected(parent: AdapterView<*>?) {}
-        }
-
-        spinMonth.onItemSelectedListener = listener
-        spinYear.onItemSelectedListener  = listener
-
-        // Load awal
+        // Load awal manual (karena setSelection di atas tidak trigger listener saat isSpinnerReady=false)
         loadJadwal()
     }
 
@@ -174,19 +175,24 @@ class JadwalFragment : Fragment() {
 
                 // ── 1. user_shifts history ────────────────────────────
                 // Ambil SEMUA row s/d akhir bulan ini, exclude off & profile_edit
-                // Kolom penting: shift_id, effective_date
+                // PENTING: filter neq tidak include NULL rows, jadi kita ambil semua
+                // lalu filter di sisi Kotlin
                 val userShiftsRaw = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("user_shifts")
                         .select {
                             filter {
                                 eq("user_id", userId)
                                 lte("effective_date", lastDayStr)
-                                neq("shift_type", "off")
-                                neq("shift_type", "profile_edit")
                             }
                             order("effective_date", Order.ASCENDING)
                         }
                         .decodeList<Map<String, kotlinx.serialization.json.JsonElement>>()
+                }.filter { row ->
+                    // Exclude row yang shift_type = 'off' atau 'profile_edit'
+                    // NULL shift_type = perubahan jadwal normal (shift_id valid) → INCLUDE
+                    val st = row["shift_type"]?.toString()?.trim('"')
+                        ?.takeIf { it != "null" }
+                    st != "off" && st != "profile_edit"
                 }
 
                 // Buat history: (effective_date → shift_id)
@@ -227,9 +233,10 @@ class JadwalFragment : Fragment() {
                 val activeShiftToday = shiftForDate(todayStr) ?: defaultShift
                 withContext(Dispatchers.Main) {
                     if (activeShiftToday != null) {
-                        val start = activeShiftToday.startTime.take(5)
-                        val end   = activeShiftToday.endTime.take(5)
-                        txtShiftInfo.text = "${activeShiftToday.name} · $start – $end"
+                        val start   = activeShiftToday.startTime.take(5)
+                        val end     = activeShiftToday.endTime.take(5)
+                        val label   = shiftDisplayName(activeShiftToday.name)
+                        txtShiftInfo.text = "$label · $start – $end"
                     } else {
                         txtShiftInfo.text = ""
                     }
@@ -363,7 +370,20 @@ class JadwalFragment : Fragment() {
         }
     }
 
-    // ── Helpers ──────────────────────────────────────────────────
+    // Helper: konversi nama shift database → label tampilan yang friendly
+    private fun shiftDisplayName(shiftName: String): String {
+        return when {
+            shiftName.contains("I", ignoreCase = false) && !shiftName.contains("II") && !shiftName.contains("III") 
+                -> "Pagi"
+            shiftName.contains("III") -> "Malam"
+            shiftName.contains("II")  -> "Sore"
+            shiftName.contains("Kantor", ignoreCase = true) -> "Kantor"
+            shiftName.contains("1")   -> "Pagi"
+            shiftName.contains("2")   -> "Sore"
+            shiftName.contains("3")   -> "Malam"
+            else -> shiftName
+        }
+    }
 
     private fun buildLemburInfo(
         dateStr: String,
@@ -466,7 +486,7 @@ class JadwalFragment : Fragment() {
                 // ── Hari depan ────────────────────────────────────────
                 item.isFuture -> {
                     val shiftLabel = item.shift?.let {
-                        "${it.name} · ${it.startTime.take(5)} – ${it.endTime.take(5)}"
+                        "${shiftDisplayName(it.name)} · ${it.startTime.take(5)} – ${it.endTime.take(5)}"
                     } ?: "Jadwal masuk"
                     holder.txtShiftLabel.text = shiftLabel
                     holder.txtShiftLabel.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary_light))
@@ -481,7 +501,7 @@ class JadwalFragment : Fragment() {
                 // ── Hari lalu / hari ini ──────────────────────────────
                 else -> {
                     val shiftLabel = item.shift?.let {
-                        "${it.name} · ${it.startTime.take(5)} – ${it.endTime.take(5)}"
+                        "${shiftDisplayName(it.name)} · ${it.startTime.take(5)} – ${it.endTime.take(5)}"
                     } ?: "-"
                     holder.txtShiftLabel.text = shiftLabel
                     holder.txtShiftLabel.setTextColor(ContextCompat.getColor(ctx, R.color.text_primary_light))
