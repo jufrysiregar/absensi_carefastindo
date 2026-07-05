@@ -11,7 +11,7 @@ data class OvertimeAssignment(
     @SerialName("assignment_date") val assignmentDate: String, // yyyy-MM-dd
     @SerialName("assigned_by") val assignedBy: String? = null,
     @SerialName("assigned_from") val assignedFrom: String = "android",
-    @SerialName("shift_type") val shiftType: String = "double",
+    @SerialName("shift_type") val shiftType: String = "lembur",
     @SerialName("status") val status: String = "pending", // pending, active, completed
     @SerialName("overtime_in") val overtimeIn: String? = null, // timestamp
     @SerialName("overtime_out") val overtimeOut: String? = null, // timestamp

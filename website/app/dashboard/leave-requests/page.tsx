@@ -141,7 +141,7 @@ export default function LeaveRequestsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Leave Requests</h1>
-          <p className="text-sm text-slate-500 mt-1">Kelola pengajuan cuti, sakit, dan izin karyawan</p>
+          <p className="text-sm text-slate-500 mt-1">Kelola pengajuan cuti, sakit, dan izin pegawai</p>
         </div>
       </div>
 
@@ -153,7 +153,7 @@ export default function LeaveRequestsPage() {
             <Input
               value={search}
               onChange={e => setSearch(e.target.value)}
-              placeholder="Cari nama karyawan..."
+              placeholder="Cari nama pegawai..."
               className="pl-9 bg-white"
             />
           </div>
@@ -209,7 +209,7 @@ export default function LeaveRequestsPage() {
         <Table>
           <TableHeader className="bg-slate-50/80">
             <TableRow>
-              <TableHead>Nama Karyawan</TableHead>
+              <TableHead>Nama Pegawai</TableHead>
               <TableHead>Jenis Pengajuan</TableHead>
               <TableHead>Tanggal Mulai</TableHead>
               <TableHead>Tanggal Selesai</TableHead>

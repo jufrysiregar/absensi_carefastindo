@@ -280,7 +280,7 @@ export default function QRCodePage() {
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">QR Code Generator</h1>
-        <p className="text-sm text-slate-500 mt-1">Generate kode QR unik untuk absensi karyawan per shift.</p>
+        <p className="text-sm text-slate-500 mt-1">Generate kode QR unik untuk absensi pegawai per shift.</p>
       </div>
 
       {/* Shift cards */}

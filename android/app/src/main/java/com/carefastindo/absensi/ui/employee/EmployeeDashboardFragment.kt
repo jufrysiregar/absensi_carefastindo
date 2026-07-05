@@ -23,6 +23,7 @@ import com.carefastindo.absensi.data.model.EmergencyAssignment
 import com.carefastindo.absensi.data.model.Notification
 import com.carefastindo.absensi.data.model.OffSchedule
 import com.carefastindo.absensi.data.model.OvertimeAssignment
+import com.carefastindo.absensi.data.model.User
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.utils.ShiftHelper
 import com.google.android.gms.location.FusedLocationProviderClient
@@ -337,6 +338,8 @@ class EmployeeDashboardFragment : Fragment() {
         // 2. Button Enablement Logic based on shift and database records
         val user = viewModel.uiState.value.user
         if (user != null) {
+            updateEmployeeIdentity(view, user)
+
             val role = user.role
             val shiftType = user.shiftType
 
@@ -419,7 +422,7 @@ class EmployeeDashboardFragment : Fragment() {
                     }
                 }
                 "ganti_off" -> {
-                    txtEmergencyInfoContent?.text = "🔄 Anda menggantikan karyawan lain hari ini (Ganti Off). Absen seperti biasa."
+                    txtEmergencyInfoContent?.text = "🔄 Anda menggantikan pegawai lain hari ini (Ganti Off). Absen seperti biasa."
                     btnOvertimeIn?.visibility = View.GONE
                     btnOvertimeOut?.visibility = View.GONE
                 }
@@ -436,31 +439,72 @@ class EmployeeDashboardFragment : Fragment() {
         }
     }
 
+    private fun updateEmployeeIdentity(view: View, u: User) {
+        val txtEmployeeName = view.findViewById<android.widget.TextView>(R.id.txtEmployeeName)
+        val txtEmployeeRole = view.findViewById<android.widget.TextView>(R.id.txtEmployeeRole)
+        val txtEmployeeNip = view.findViewById<android.widget.TextView>(R.id.txtEmployeeNip)
+        val txtEmployeeShiftTime = view.findViewById<android.widget.TextView>(R.id.txtEmployeeShiftTime)
+
+        txtEmployeeName?.text = u.name
+
+        if (u.role.equals("superadmin", ignoreCase = true)) {
+            txtEmployeeRole?.text = formatDisplayLabel(u.role)
+            txtEmployeeNip?.text = "NIP: N/A"
+            txtEmployeeShiftTime?.visibility = View.GONE
+            txtEmployeeShiftTime?.text = ""
+            return
+        }
+
+        val positionLabel = formatDisplayLabel(u.position ?: u.role)
+        val rawShift = u.shiftType?.trim()
+        val hasShift = !rawShift.isNullOrBlank() && rawShift != "-" && !rawShift.equals("null", ignoreCase = true)
+        val isOffIdentity = isOffToday || todayAttendance?.status.equals("off", ignoreCase = true) || rawShift.equals("off", ignoreCase = true)
+        val shiftLabel = when {
+            isOffIdentity -> "Off"
+            hasShift -> formatShiftLabel(rawShift!!)
+            else -> "-"
+        }
+
+        txtEmployeeRole?.text = "$positionLabel - $shiftLabel"
+        txtEmployeeNip?.text = "NIP: ${u.nip ?: "-"}"
+
+        if (isOffIdentity || !hasShift) {
+            txtEmployeeShiftTime?.visibility = View.GONE
+            txtEmployeeShiftTime?.text = ""
+        } else {
+            val (masuk, pulang) = ShiftHelper.getShiftTimes(u.role, rawShift)
+            txtEmployeeShiftTime?.text = "($masuk - $pulang)"
+            txtEmployeeShiftTime?.visibility = View.VISIBLE
+        }
+    }
+
+    private fun formatDisplayLabel(value: String?): String {
+        val cleaned = value?.trim().orEmpty()
+        if (cleaned.isBlank() || cleaned == "-") return "-"
+        return cleaned.split(Regex("\\s+"))
+            .joinToString(" ") { word ->
+                word.lowercase(Locale("id", "ID")).replaceFirstChar { ch ->
+                    if (ch.isLowerCase()) ch.titlecase(Locale("id", "ID")) else ch.toString()
+                }
+            }
+    }
+
+    private fun formatShiftLabel(value: String): String {
+        return value.trim().split(Regex("\\s+"))
+            .joinToString(" ") { word ->
+                val lower = word.lowercase(Locale("id", "ID"))
+                if (lower in setOf("i", "ii", "iii")) lower.uppercase(Locale("id", "ID"))
+                else lower.replaceFirstChar { ch ->
+                    if (ch.isLowerCase()) ch.titlecase(Locale("id", "ID")) else ch.toString()
+                }
+            }
+    }
+
     private fun observeViewModel() {
         lifecycleScope.launch {
             viewModel.uiState.collectLatest { state ->
                 val view = view ?: return@collectLatest
-                
-                // Update header text views
-                val txtEmployeeName = view.findViewById<android.widget.TextView>(R.id.txtEmployeeName)
-                val txtEmployeeRole = view.findViewById<android.widget.TextView>(R.id.txtEmployeeRole)
-                val txtEmployeeNip = view.findViewById<android.widget.TextView>(R.id.txtEmployeeNip)
-                val txtEmployeeShiftTime = view.findViewById<android.widget.TextView>(R.id.txtEmployeeShiftTime)
-
-                state.user?.let { u ->
-                    txtEmployeeName?.text = u.name
-                    if (u.role.equals("superadmin", ignoreCase = true)) {
-                        txtEmployeeRole?.text = u.role
-                        txtEmployeeNip?.text = "NIP: N/A"
-                        txtEmployeeShiftTime?.text = "(N/A - N/A)"
-                    } else {
-                        txtEmployeeRole?.text = "${u.position ?: u.role} - ${u.shiftType ?: "-"}"
-                        txtEmployeeNip?.text = "NIP: ${u.nip ?: "-"}"
-                        
-                        val (masuk, pulang) = ShiftHelper.getShiftTimes(u.role, u.shiftType)
-                        txtEmployeeShiftTime?.text = "($masuk - $pulang)"
-                    }
-                }
+                state.user?.let { u -> updateEmployeeIdentity(view, u) }
             }
         }
     }
@@ -531,7 +575,7 @@ class EmployeeDashboardFragment : Fragment() {
                     return@launch
                 }
 
-                // 3. Cek apakah shift_id di QR sesuai dengan shift karyawan ini
+                // 3. Cek apakah shift_id di QR sesuai dengan shift pegawai ini
                 val userId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
                 if (userId == null) {
                     showQRError("Sesi tidak valid. Silahkan login ulang.")
@@ -543,7 +587,7 @@ class EmployeeDashboardFragment : Fragment() {
                     ShiftHelper.getAttendanceDate(user?.role ?: "", user?.shiftType)
                 }
 
-                // Ambil shift_id karyawan dari user_shifts hari ini
+                // Ambil shift_id pegawai dari user_shifts hari ini
                 val userShiftData = withContext(kotlinx.coroutines.Dispatchers.IO) {
                     try {
                         SupabaseClient.db.from("user_shifts")
@@ -569,7 +613,7 @@ class EmployeeDashboardFragment : Fragment() {
                     ?: ""
 
                 if (userShiftId.isEmpty()) {
-                    // Karyawan tidak punya shift hari ini — cek apakah punya emergency assignment (ganti off/lembur)
+                    // Pegawai tidak punya shift hari ini — cek apakah punya emergency assignment (ganti off/lembur)
                     val hasEmergency = hasEmergencyAssignmentToday
                     if (!hasEmergency) {
                         showQRError("Anda tidak memiliki jadwal shift hari ini.")

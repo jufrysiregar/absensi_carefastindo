@@ -110,7 +110,7 @@ class AssignLemburActivity : AppCompatActivity() {
         val selectedShiftIndex = binding.spinShift.selectedItemPosition
 
         if (selectedUserIndex < 0 || selectedUserIndex >= usersList.size) {
-            Toast.makeText(this, "Silakan pilih karyawan", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, "Silakan pilih pegawai", Toast.LENGTH_SHORT).show()
             return
         }
 
@@ -145,7 +145,7 @@ class AssignLemburActivity : AppCompatActivity() {
                     assignmentDate = selectedDate!!,
                     assignedBy = currentAdminId,
                     assignedFrom = "android",
-                    shiftType = "double",
+                    shiftType = "lembur",
                     status = "pending",
                     keterangan = keterangan
                 )

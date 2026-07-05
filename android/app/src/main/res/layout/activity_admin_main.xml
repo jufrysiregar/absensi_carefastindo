@@ -57,7 +57,7 @@
             android:id="@+id/txtToolbarTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text="Dashboard Admin"
+            android:text="Dashboard"
             android:textColor="@color/text_primary_light"
             android:textSize="16sp"
             android:textStyle="bold"

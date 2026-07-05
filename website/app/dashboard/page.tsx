@@ -374,7 +374,7 @@ export default function DashboardPage() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card className="hover:shadow-md transition-shadow">
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-slate-500">Total Karyawan</CardTitle>
+            <CardTitle className="text-sm font-medium text-slate-500">Total Pegawai</CardTitle>
             <div className="w-8 h-8 rounded-full bg-blue-50 flex items-center justify-center">
               <Users className="w-4 h-4 text-blue-500" />
             </div>
@@ -555,7 +555,7 @@ export default function DashboardPage() {
         <Card className="shadow-sm opacity-60 pointer-events-none select-none">
           <CardHeader className="flex flex-row items-center justify-between pb-2 border-b border-slate-200 bg-slate-100/80">
             <CardTitle className="text-base flex items-center gap-2 text-slate-500">
-              🏖️ Pengajuan Cuti Karyawan
+              🏖️ Pengajuan Cuti Pegawai
             </CardTitle>
             <Badge variant="outline" className="text-slate-600 bg-slate-300 border-slate-300 font-mono text-[10px] uppercase tracking-wider">
               Segera Hadir
@@ -574,7 +574,7 @@ export default function DashboardPage() {
       <Card className="shadow-sm overflow-hidden">
         <CardHeader className="border-b border-slate-100 bg-slate-50/50">
           <div className="flex items-center justify-between">
-            <CardTitle className="text-base">Karyawan Terakhir Absen</CardTitle>
+            <CardTitle className="text-base">Pegawai Terakhir Absen</CardTitle>
             <span className="text-xs text-emerald-500 font-semibold flex items-center gap-1">
               <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping" />
               Realtime

@@ -45,7 +45,7 @@ async function run() {
     };
 
     // ============================================================
-    // DUMMY DATA - 6 Karyawan Utama
+    // DUMMY DATA - 6 Pegawai Utama
     // ============================================================
     const dummyList = [
       {
@@ -111,7 +111,7 @@ async function run() {
         breakEnd:      '19:15',
         checkOut:      '23:01',
         status:        'hadir',
-        shiftType:     'double',
+        shiftType:     'lembur',
         notes:         'Pembersihan kaca luar tower A',
         overtimeStart: '23:01',
         overtimeEnd:   '02:00'   // next day
@@ -185,8 +185,8 @@ async function run() {
         if (e) { console.error(`  ✗ attendance insert: ${e.message}`); } else { console.log(`  ✓ attendance INSERTED`); }
       }
 
-      // 3. Overtime (only for double shift)
-      if (d.shiftType === 'double' && d.overtimeStart && d.overtimeEnd) {
+      // 3. Overtime (lembur)
+      if (d.shiftType === 'lembur' && d.overtimeStart && d.overtimeEnd) {
         const { data: existingOT } = await supabase
           .from('overtime_assignments')
           .select('id')

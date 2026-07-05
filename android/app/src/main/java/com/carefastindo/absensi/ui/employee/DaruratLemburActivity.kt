@@ -223,7 +223,7 @@ class DaruratLemburActivity : AppCompatActivity() {
     private fun submitAssignment() {
         val empIdx = spinEmployee.selectedItemPosition
         if (empIdx < 0 || empIdx >= usersList.size) {
-            Toast.makeText(this, "Pilih karyawan terlebih dahulu", Toast.LENGTH_SHORT).show(); return
+            Toast.makeText(this, "Pilih pegawai terlebih dahulu", Toast.LENGTH_SHORT).show(); return
         }
 
         val reason = if (radioLembur.isChecked) "lembur" else "ganti_off"
@@ -243,11 +243,11 @@ class DaruratLemburActivity : AppCompatActivity() {
             // Ganti Off
             val replIdx = spinReplacing.selectedItemPosition
             if (replIdx < 0 || replIdx >= usersList.size) {
-                Toast.makeText(this, "Pilih karyawan yang digantikan", Toast.LENGTH_SHORT).show(); return
+                Toast.makeText(this, "Pilih pegawai yang digantikan", Toast.LENGTH_SHORT).show(); return
             }
             replacingUserId = usersList[replIdx].id
             if (replacingUserId == assignedUser.id) {
-                Toast.makeText(this, "Karyawan yang ditugaskan dan digantikan tidak boleh sama", Toast.LENGTH_SHORT).show(); return
+                Toast.makeText(this, "Pegawai yang ditugaskan dan digantikan tidak boleh sama", Toast.LENGTH_SHORT).show(); return
             }
             if (selectedReplacingDate == null) {
                 Toast.makeText(this, "Pilih tanggal off yang akan digantikan", Toast.LENGTH_SHORT).show(); return
@@ -276,8 +276,8 @@ class DaruratLemburActivity : AppCompatActivity() {
                     SupabaseClient.db.from("emergency_assignments").insert(assignment)
                 }
 
-                // Untuk ganti_off: tambahkan juga off_schedule baru untuk karyawan yang digantikan
-                // agar karyawan yang digantikan (replacing_user) mendapat hari off baru di replacing_date
+                // Untuk ganti_off: tambahkan juga off_schedule baru untuk pegawai yang digantikan
+                // agar pegawai yang digantikan (replacing_user) mendapat hari off baru di replacing_date
                 if (reason == "ganti_off" && replacingUserId != null && replacingDate != null) {
                     try {
                         withContext(Dispatchers.IO) {

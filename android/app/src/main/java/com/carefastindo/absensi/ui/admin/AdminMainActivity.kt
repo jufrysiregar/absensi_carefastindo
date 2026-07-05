@@ -28,7 +28,7 @@ class AdminMainActivity : AppCompatActivity() {
         
         // Load default fragment on startup
         if (savedInstanceState == null) {
-            replaceFragment(TabDashboardFragment(), "Dashboard Admin")
+            replaceFragment(TabDashboardFragment(), "Dashboard")
             binding.navView.setCheckedItem(R.id.nav_admin_dashboard)
         }
     }
@@ -47,28 +47,28 @@ class AdminMainActivity : AppCompatActivity() {
         binding.navView.setNavigationItemSelectedListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.nav_admin_dashboard -> {
-                    replaceFragment(TabDashboardFragment(), "Dashboard Admin")
-                }
-                R.id.nav_admin_rekap -> {
-                    replaceFragment(TabRekapFragment(), "Rekap Absensi")
-                }
-                R.id.nav_admin_leave -> {
-                    replaceFragment(TabLeaveRequestsFragment(), "Pengajuan Izin")
+                    replaceFragment(TabDashboardFragment(), "Dashboard")
                 }
                 R.id.nav_admin_employee -> {
                     replaceFragment(TabEmployeeCrudFragment(), "Manajemen Pegawai")
                 }
-                R.id.nav_admin_off -> {
-                    replaceFragment(TabOffSchedulesFragment(), "Jadwal Off Pegawai")
-                }
-                R.id.nav_admin_emergency -> {
-                    replaceFragment(TabEmergencyFragment(), "Darurat & Lembur")
-                }
-                R.id.nav_admin_salary -> {
-                    replaceFragment(TabSalarySlipFragment(), "Slip Gaji Generator")
+                R.id.nav_admin_schedule_change -> {
+                    replaceFragment(TabScheduleChangeFragment(), "Ubah Jadwal Pegawai")
                 }
                 R.id.nav_admin_settings -> {
                     replaceFragment(TabSettingsFragment(), "Pengaturan Kantor")
+                }
+                R.id.nav_admin_leave -> {
+                    replaceFragment(TabLeaveRequestsFragment(), "Pengajuan Izin")
+                }
+                R.id.nav_admin_rekap -> {
+                    replaceFragment(TabRekapFragment(), "Rekap Absensi")
+                }
+                R.id.nav_admin_schedule_history -> {
+                    replaceFragment(TabScheduleHistoryFragment(), "Riwayat Perubahan Jadwal")
+                }
+                R.id.nav_admin_salary -> {
+                    replaceFragment(GenericTabFragment("Segera Hadir"), "Slip Gaji Generator")
                 }
                 R.id.nav_admin_tentang -> {
                     startActivity(Intent(this, TentangAplikasiActivity::class.java))

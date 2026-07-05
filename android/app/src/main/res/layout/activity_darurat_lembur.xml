@@ -78,11 +78,11 @@
                         android:textSize="13sp"
                         android:layout_marginBottom="16dp" />
 
-                    <!-- Karyawan Ditugaskan -->
+                    <!-- Pegawai Ditugaskan -->
                     <TextView
                         android:layout_width="wrap_content"
                         android:layout_height="wrap_content"
-                        android:text="Karyawan Ditugaskan *"
+                        android:text="Pegawai Ditugaskan *"
                         android:textColor="@color/text_secondary_light"
                         android:textSize="12sp"
                         android:layout_marginBottom="4dp" />
@@ -166,7 +166,7 @@
                             android:background="@drawable/bg_bottom_sheet" />
                     </LinearLayout>
 
-                    <!-- Karyawan Digantikan (muncul jika Ganti Off) -->
+                    <!-- Pegawai Digantikan (muncul jika Ganti Off) -->
                     <LinearLayout
                         android:id="@+id/layoutReplacing"
                         android:layout_width="match_parent"
@@ -178,7 +178,7 @@
                         <TextView
                             android:layout_width="wrap_content"
                             android:layout_height="wrap_content"
-                            android:text="Karyawan Digantikan *"
+                            android:text="Pegawai Digantikan *"
                             android:textColor="@color/text_secondary_light"
                             android:textSize="12sp"
                             android:layout_marginBottom="4dp" />

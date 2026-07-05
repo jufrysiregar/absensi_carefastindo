@@ -28,7 +28,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: authError.message }, { status: 400 })
     }
 
-    // 2. Kirim notifikasi ke karyawan yang passwordnya diubah
+    // 2. Kirim notifikasi ke pegawai yang passwordnya diubah
     const { error: notifError } = await supabaseAdmin.from('notifications').insert({
       user_id: userId,
       message: 'Admin telah memperbaharui password akun anda, silahkan coba relogin untuk memastikan password baru anda apakah sudah bisa digunakan. Terimakasih.',

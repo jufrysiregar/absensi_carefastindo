@@ -56,12 +56,33 @@
                             android:textStyle="bold" />
                     </LinearLayout>
                 </androidx.cardview.widget.CardView>
-                <!-- Assign Lembur Button -->
+                <TextView
+                    android:id="@+id/txtEmployeeActionsTitle"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Tindakan untuk Pegawai"
+                    android:textColor="@color/text_primary_light"
+                    android:textSize="16sp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="16dp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/btnUbahJadwalKaryawan"
+                    android:layout_width="match_parent"
+                    android:layout_height="56dp"
+                    android:text="Ubah Jadwal Pegawai"
+                    android:textColor="@color/white"
+                    android:backgroundTint="@android:color/black"
+                    app:cornerRadius="12dp"
+                    android:textStyle="bold"
+                    android:layout_marginBottom="24dp"
+                    android:visibility="gone" />
+
                 <com.google.android.material.button.MaterialButton
                     android:id="@+id/btnAssignLemburAdmin"
                     android:layout_width="match_parent"
                     android:layout_height="56dp"
-                    android:text="⚡ Assign Lembur"
+                    android:text="Assign Lembur"
                     android:textColor="@color/white"
                     android:backgroundTint="@color/accent"
                     app:cornerRadius="12dp"

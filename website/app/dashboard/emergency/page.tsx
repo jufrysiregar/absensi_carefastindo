@@ -211,10 +211,10 @@ export default function EmergencyPage() {
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!form.assigned_user_id || !form.target_date) {
-      toast.error('Karyawan dan tanggal wajib diisi!'); return
+      toast.error('Pegawai dan tanggal wajib diisi!'); return
     }
     if (form.reason === 'ganti_off' && !form.replacing_user_id) {
-      toast.error('Karyawan yang digantikan wajib diisi!'); return
+      toast.error('Pegawai yang digantikan wajib diisi!'); return
     }
     saveMutation.mutate({ ...form, id: editRow?.id })
   }
@@ -226,7 +226,7 @@ export default function EmergencyPage() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Darurat &amp; Lembur</h1>
-          <p className="text-sm text-slate-500 mt-1">Kelola penugasan lembur dan ganti off karyawan.</p>
+          <p className="text-sm text-slate-500 mt-1">Kelola penugasan lembur dan ganti off pegawai.</p>
         </div>
         <button onClick={() => { setEditRow(null); setForm({ assigned_user_id: '', target_date: today, reason: 'lembur', replacing_user_id: '', shift_id: '', status: 'pending' }); setShowForm(true) }}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-blue-600 hover:bg-blue-700 transition-all self-start sm:self-auto">
@@ -271,10 +271,10 @@ export default function EmergencyPage() {
               <TableHeader className="bg-slate-50">
                 <TableRow>
                   <TableHead className="pl-4">No</TableHead>
-                  <TableHead>Karyawan Ditugaskan</TableHead>
+                  <TableHead>Pegawai Ditugaskan</TableHead>
                   <TableHead>Tanggal</TableHead>
                   <TableHead>Tipe</TableHead>
-                  <TableHead>Karyawan Digantikan / Shift</TableHead>
+                  <TableHead>Pegawai Digantikan / Shift</TableHead>
                   <TableHead>Status</TableHead>
                   <TableHead className="text-center pr-4">Aksi</TableHead>
                 </TableRow>
@@ -329,12 +329,12 @@ export default function EmergencyPage() {
       {/* Form Modal */}
       <Modal open={showForm} onClose={resetForm} title={editRow ? 'Edit Penugasan' : 'Tambah Penugasan'}>
         <form onSubmit={handleSubmit} className="space-y-4">
-          {/* Karyawan Ditugaskan */}
+          {/* Pegawai Ditugaskan */}
           <div>
-            <label className="text-sm font-semibold text-slate-700 mb-1 block">Karyawan Ditugaskan *</label>
+            <label className="text-sm font-semibold text-slate-700 mb-1 block">Pegawai Ditugaskan *</label>
             <select value={form.assigned_user_id} onChange={e => setForm(f => ({ ...f, assigned_user_id: e.target.value }))}
               className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-              <option value="">-- Pilih Karyawan --</option>
+              <option value="">-- Pilih Pegawai --</option>
               {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
             </select>
           </div>
@@ -361,13 +361,13 @@ export default function EmergencyPage() {
             </div>
           </div>
 
-          {/* Conditional: Ganti Off → pilih karyawan digantikan */}
+          {/* Conditional: Ganti Off → pilih pegawai digantikan */}
           {form.reason === 'ganti_off' && (
             <div>
-              <label className="text-sm font-semibold text-slate-700 mb-1 block">Karyawan Digantikan *</label>
+              <label className="text-sm font-semibold text-slate-700 mb-1 block">Pegawai Digantikan *</label>
               <select value={form.replacing_user_id} onChange={e => setForm(f => ({ ...f, replacing_user_id: e.target.value }))}
                 className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                <option value="">-- Pilih Karyawan --</option>
+                <option value="">-- Pilih Pegawai --</option>
                 {users.filter(u => u.id !== form.assigned_user_id).map(u => (
                   <option key={u.id} value={u.id}>{u.name}</option>
                 ))}

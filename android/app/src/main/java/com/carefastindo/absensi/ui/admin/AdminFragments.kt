@@ -23,6 +23,7 @@ import com.carefastindo.absensi.data.model.*
 import com.carefastindo.absensi.data.remote.SupabaseClient
 import com.carefastindo.absensi.utils.EmployeeHelper
 import com.carefastindo.absensi.utils.ShiftHelper
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.floatingactionbutton.FloatingActionButton
 import com.google.android.material.snackbar.Snackbar
 import com.google.android.material.textfield.TextInputEditText
@@ -32,6 +33,8 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import java.io.File
 import java.io.FileOutputStream
 import java.text.SimpleDateFormat
@@ -68,8 +71,27 @@ class TabDashboardFragment : Fragment() {
     private lateinit var txtCountSakit: TextView
     private lateinit var txtCountOff: TextView
     private lateinit var txtCountLembur: TextView
+    private lateinit var txtEmployeeActionsTitle: TextView
+    private lateinit var btnUbahJadwalKaryawan: MaterialButton
+    private lateinit var btnAssignLemburAdmin: MaterialButton
     private lateinit var swipeRefresh: androidx.swiperefreshlayout.widget.SwipeRefreshLayout
     private lateinit var loadingOverlay: FrameLayout
+
+    @Serializable
+    private data class UserShiftPayload(
+        @SerialName("user_id") val userId: String,
+        @SerialName("shift_id") val shiftId: String? = null,
+        @SerialName("shift_type") val shiftType: String? = null,
+        @SerialName("reason") val reason: String? = null,
+        @SerialName("effective_date") val effectiveDate: String
+    )
+
+    @Serializable
+    private data class NotificationPayload(
+        @SerialName("user_id") val userId: String,
+        @SerialName("message") val message: String,
+        @SerialName("is_read") val isRead: Boolean = false
+    )
 
     override fun onCreateView(
         inflater: LayoutInflater, container: ViewGroup?,
@@ -83,23 +105,58 @@ class TabDashboardFragment : Fragment() {
         txtCountSakit = view.findViewById(R.id.txtCountSakit)
         txtCountOff = view.findViewById(R.id.txtCountOff)
         txtCountLembur = view.findViewById(R.id.txtCountLembur)
-        swipeRefresh = view.findViewById<androidx.swiperefreshlayout.widget.SwipeRefreshLayout>(R.id.swipeRefresh)
+        txtEmployeeActionsTitle = view.findViewById(R.id.txtEmployeeActionsTitle)
+        btnUbahJadwalKaryawan = view.findViewById(R.id.btnUbahJadwalKaryawan)
+        btnAssignLemburAdmin = view.findViewById(R.id.btnAssignLemburAdmin)
+        swipeRefresh = view.findViewById(R.id.swipeRefresh)
         loadingOverlay = view.findViewById(R.id.loadingOverlay)
 
-        // Set Date
         val sdf = SimpleDateFormat("EEEE, dd MMMM yyyy", Locale("id", "ID"))
         txtDate.text = sdf.format(Date())
 
         swipeRefresh.setOnRefreshListener { loadDashboardData() }
-
-        val btnAssignLemburAdmin = view.findViewById<com.google.android.material.button.MaterialButton>(R.id.btnAssignLemburAdmin)
-        btnAssignLemburAdmin?.visibility = View.VISIBLE
-        btnAssignLemburAdmin?.setOnClickListener {
-            startActivity(android.content.Intent(requireContext(), AssignLemburActivity::class.java))
+        btnAssignLemburAdmin.setOnClickListener {
+            startActivity(Intent(requireContext(), AssignLemburActivity::class.java))
         }
+        btnUbahJadwalKaryawan.setOnClickListener { showScheduleActionMenu() }
 
+        configureEmployeeActionButtons()
         loadDashboardData()
         return view
+    }
+
+    private fun configureEmployeeActionButtons() {
+        btnUbahJadwalKaryawan.visibility = View.GONE
+        btnAssignLemburAdmin.visibility = View.GONE
+        txtEmployeeActionsTitle.visibility = View.GONE
+
+        lifecycleScope.launch {
+            val currentUserId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+            val role = try {
+                if (currentUserId.isNullOrEmpty()) null else withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("users")
+                        .select { filter { eq("id", currentUserId) } }
+                        .decodeList<User>()
+                        .firstOrNull()
+                        ?.role
+                }
+            } catch (_: Exception) {
+                null
+            }
+
+            when {
+                "superadmin".equals(role, ignoreCase = true) -> {
+                    txtEmployeeActionsTitle.visibility = View.VISIBLE
+                    btnUbahJadwalKaryawan.visibility = View.VISIBLE
+                    btnAssignLemburAdmin.visibility = View.GONE
+                }
+                "leader".equals(role, ignoreCase = true) || "supervisor".equals(role, ignoreCase = true) -> {
+                    txtEmployeeActionsTitle.visibility = View.VISIBLE
+                    btnUbahJadwalKaryawan.visibility = View.GONE
+                    btnAssignLemburAdmin.visibility = View.VISIBLE
+                }
+            }
+        }
     }
 
     private fun loadDashboardData() {
@@ -159,6 +216,318 @@ class TabDashboardFragment : Fragment() {
         }
     }
 
+    private fun showScheduleActionMenu() {
+        val actions = arrayOf("Change Shift", "Off Day", "Lembur", "Ganti Off", "Cuti (Segera Hadir)")
+        AlertDialog.Builder(requireContext())
+            .setTitle("Ubah Jadwal Pegawai")
+            .setItems(actions) { _, which ->
+                when (which) {
+                    0 -> showChangeShiftDialog()
+                    1 -> showOffDayDialog()
+                    2 -> startActivity(Intent(requireContext(), AssignLemburActivity::class.java))
+                    3 -> showGantiOffDialog()
+                    4 -> Toast.makeText(context, "Cuti segera hadir.", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .show()
+    }
+
+    private fun showChangeShiftDialog() {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val employees = fetchActiveEmployees()
+                val shifts = fetchActiveShifts()
+                loadingOverlay.visibility = View.GONE
+
+                if (employees.isEmpty() || shifts.isEmpty()) {
+                    Toast.makeText(context, "Data pegawai atau shift belum tersedia.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val form = createScheduleFormLayout()
+                val spinEmployee = Spinner(requireContext())
+                val spinShift = Spinner(requireContext())
+                val btnDate = Button(requireContext())
+                var selectedDate = todayIso()
+
+                addFormLabel(form, "Pegawai")
+                spinEmployee.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinEmployee)
+
+                addFormLabel(form, "Shift baru")
+                spinShift.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, shifts.map { shift -> shift.name })
+                form.addView(spinShift)
+
+                addFormLabel(form, "Tanggal efektif")
+                btnDate.text = "Pilih Tanggal: $selectedDate"
+                btnDate.setOnClickListener { showDatePicker(selectedDate) { date -> selectedDate = date; btnDate.text = "Pilih Tanggal: $date" } }
+                form.addView(btnDate)
+
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Change Shift")
+                    .setView(form)
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Simpan") { _, _ ->
+                        val employee = employees.getOrNull(spinEmployee.selectedItemPosition)
+                        val shift = shifts.getOrNull(spinShift.selectedItemPosition)
+                        if (employee == null || shift == null) {
+                            Toast.makeText(context, "Pilih pegawai dan shift terlebih dahulu.", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        saveChangeShift(employee, shift, selectedDate)
+                    }
+                    .show()
+            } catch (e: Exception) {
+                loadingOverlay.visibility = View.GONE
+                Toast.makeText(context, "Gagal memuat form: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showOffDayDialog() {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val employees = fetchActiveEmployees()
+                loadingOverlay.visibility = View.GONE
+
+                if (employees.isEmpty()) {
+                    Toast.makeText(context, "Data pegawai belum tersedia.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val form = createScheduleFormLayout()
+                val spinEmployee = Spinner(requireContext())
+                val btnDate = Button(requireContext())
+                val edtReason = EditText(requireContext())
+                var selectedDate = todayIso()
+
+                addFormLabel(form, "Pegawai")
+                spinEmployee.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinEmployee)
+
+                addFormLabel(form, "Tanggal off")
+                btnDate.text = "Pilih Tanggal: $selectedDate"
+                btnDate.setOnClickListener { showDatePicker(selectedDate) { date -> selectedDate = date; btnDate.text = "Pilih Tanggal: $date" } }
+                form.addView(btnDate)
+
+                addFormLabel(form, "Alasan")
+                edtReason.setText("libur")
+                form.addView(edtReason)
+
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Off Day")
+                    .setView(form)
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Simpan") { _, _ ->
+                        val employee = employees.getOrNull(spinEmployee.selectedItemPosition)
+                        val reason = edtReason.text.toString().trim()
+                        if (employee == null || reason.isEmpty()) {
+                            Toast.makeText(context, "Pegawai dan alasan wajib diisi.", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        saveOffDay(employee, selectedDate, reason)
+                    }
+                    .show()
+            } catch (e: Exception) {
+                loadingOverlay.visibility = View.GONE
+                Toast.makeText(context, "Gagal memuat form: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showGantiOffDialog() {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val employees = fetchActiveEmployees()
+                loadingOverlay.visibility = View.GONE
+
+                if (employees.size < 2) {
+                    Toast.makeText(context, "Minimal perlu dua pegawai untuk ganti off.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+
+                val form = createScheduleFormLayout()
+                val spinAssigned = Spinner(requireContext())
+                val spinReplacing = Spinner(requireContext())
+                val btnDate = Button(requireContext())
+                var selectedDate = todayIso()
+
+                addFormLabel(form, "Pegawai yang bertugas")
+                spinAssigned.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinAssigned)
+
+                addFormLabel(form, "Menggantikan pegawai")
+                spinReplacing.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinReplacing)
+
+                addFormLabel(form, "Tanggal ganti off")
+                btnDate.text = "Pilih Tanggal: $selectedDate"
+                btnDate.setOnClickListener { showDatePicker(selectedDate) { date -> selectedDate = date; btnDate.text = "Pilih Tanggal: $date" } }
+                form.addView(btnDate)
+
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Ganti Off")
+                    .setView(form)
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Simpan") { _, _ ->
+                        val assigned = employees.getOrNull(spinAssigned.selectedItemPosition)
+                        val replacing = employees.getOrNull(spinReplacing.selectedItemPosition)
+                        if (assigned == null || replacing == null || assigned.id == replacing.id) {
+                            Toast.makeText(context, "Pilih dua pegawai yang berbeda.", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        saveGantiOff(assigned, replacing, selectedDate)
+                    }
+                    .show()
+            } catch (e: Exception) {
+                loadingOverlay.visibility = View.GONE
+                Toast.makeText(context, "Gagal memuat form: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private suspend fun fetchActiveEmployees(): List<User> = withContext(Dispatchers.IO) {
+        SupabaseClient.db.from("users")
+            .select { filter { eq("is_active", true) } }
+            .decodeList<User>()
+            .filter { !it.role.equals("superadmin", ignoreCase = true) }
+    }
+
+    private suspend fun fetchActiveShifts(): List<Shift> = withContext(Dispatchers.IO) {
+        SupabaseClient.db.from("shifts")
+            .select { filter { eq("is_active", true) } }
+            .decodeList<Shift>()
+    }
+
+    private fun createScheduleFormLayout(): LinearLayout {
+        return LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(24, 8, 24, 0)
+        }
+    }
+
+    private fun addFormLabel(parent: LinearLayout, text: String) {
+        parent.addView(TextView(requireContext()).apply {
+            this.text = text
+            textSize = 14f
+            setPadding(0, 16, 0, 6)
+        })
+    }
+
+    private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+    private fun showDatePicker(currentDate: String, onPicked: (String) -> Unit) {
+        val cal = Calendar.getInstance()
+        try {
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(currentDate)?.let { cal.time = it }
+        } catch (_: Exception) { }
+        DatePickerDialog(requireContext(), { _, year, month, day ->
+            val picked = Calendar.getInstance().apply { set(year, month, day) }
+            onPicked(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(picked.time))
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    }
+
+    private fun saveChangeShift(employee: User, shift: Shift, effectiveDate: String) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val payload = UserShiftPayload(
+                    userId = employee.id,
+                    shiftId = shift.id,
+                    effectiveDate = effectiveDate
+                )
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("user_shifts").insert(payload)
+                    SupabaseClient.db.from("notifications").insert(NotificationPayload(
+                        userId = employee.id,
+                        message = "Admin mengubah jadwal shift kerja kamu, silahkan absen sesuai jam yang ditentukan."
+                    ))
+                }
+                Toast.makeText(context, "Shift pegawai berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+                loadDashboardData()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal memperbarui shift: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun saveOffDay(employee: User, date: String, reason: String) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("user_shifts").insert(UserShiftPayload(
+                        userId = employee.id,
+                        shiftId = null,
+                        shiftType = "off",
+                        reason = reason,
+                        effectiveDate = date
+                    ))
+                    SupabaseClient.db.from("attendance").update({ set("status", "off") }) {
+                        filter {
+                            eq("user_id", employee.id)
+                            eq("date", date)
+                        }
+                    }
+                    SupabaseClient.db.from("notifications").insert(NotificationPayload(
+                        userId = employee.id,
+                        message = "Jadwal kamu diperbarui menjadi Off pada tanggal $date."
+                    ))
+                }
+                Toast.makeText(context, "Hari off berhasil diset!", Toast.LENGTH_SHORT).show()
+                loadDashboardData()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal menyimpan off day: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun saveGantiOff(assigned: User, replacing: User, date: String) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val currentAdminId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+                val assignment = EmergencyAssignment(
+                    assignedUserId = assigned.id,
+                    targetDate = date,
+                    reason = "ganti_off",
+                    replacingUserId = replacing.id,
+                    assignedBy = currentAdminId,
+                    assignedFrom = "android",
+                    status = "pending"
+                )
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("emergency_assignments").insert(assignment)
+                    SupabaseClient.db.from("off_schedules").insert(OffSchedule(
+                        userId = replacing.id,
+                        date = date,
+                        reason = "Ganti off dengan ${assigned.name}"
+                    ))
+                    SupabaseClient.db.from("notifications").insert(NotificationPayload(
+                        userId = assigned.id,
+                        message = "Jadwal ganti off kamu telah diperbarui."
+                    ))
+                    SupabaseClient.db.from("notifications").insert(NotificationPayload(
+                        userId = replacing.id,
+                        message = "Jadwal ganti off kamu telah diperbarui."
+                    ))
+                }
+                Toast.makeText(context, "Ganti off berhasil disimpan!", Toast.LENGTH_SHORT).show()
+                loadDashboardData()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal menyimpan ganti off: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
     private fun isDateOverlapping(target: String, start: String, end: String): Boolean {
         return target >= start && target <= end
     }
@@ -842,8 +1211,10 @@ class TabEmployeeCrudFragment : Fragment() {
         spinRole.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
             override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
                 if (roles[pos] == "Supervisor") {
+                    txtShiftLabel.visibility = View.GONE
                     spinShift.visibility = View.GONE
                 } else {
+                    txtShiftLabel.visibility = View.VISIBLE
                     spinShift.visibility = View.VISIBLE
                 }
             }
@@ -920,68 +1291,48 @@ class TabEmployeeCrudFragment : Fragment() {
         val edtEmployeeCode = dialogView.findViewById<EditText>(R.id.edtEmployeeCode)
         val edtName = dialogView.findViewById<EditText>(R.id.edtName)
         val edtEmail = dialogView.findViewById<EditText>(R.id.edtEmail)
-        val edtPassword = dialogView.findViewById<EditText>(R.id.edtPassword)
+        val layoutPassword = dialogView.findViewById<View>(R.id.layoutPassword)
+        val txtShiftLabel = dialogView.findViewById<TextView>(R.id.txtShiftLabel)
         val spinRole = dialogView.findViewById<Spinner>(R.id.spinRole)
         val spinShift = dialogView.findViewById<Spinner>(R.id.spinShift)
-
-        // Populate old data
-        edtEmployeeCode.setText(user.employeeCode ?: "")
         edtName.setText(user.name)
         edtEmail.setText(user.email)
-        edtEmail.isEnabled = false // Email cannot be modified
-        edtPassword.visibility = View.GONE // Password modified via Reset password button
+        edtEmail.isEnabled = false
+        edtEmployeeCode.setText(user.employeeCode ?: "")
+        layoutPassword.visibility = View.GONE
+        txtShiftLabel.visibility = View.GONE
+        spinShift.visibility = View.GONE
 
         val roles = arrayOf("Cleaner", "Housekeeping", "Gardener", "Gondola", "Leader", "Supervisor")
         spinRole.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, roles)
-        spinRole.setSelection(roles.indexOf(user.role))
-
-        val shifts = if (ShiftHelper.cachedShifts.isNotEmpty()) {
-            ShiftHelper.cachedShifts.map { it.name }.toTypedArray()
-        } else {
-            arrayOf("Shift 1", "Shift 2", "Shift 3", "Shift Kantor")
-        }
-        spinShift.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, shifts)
-        user.shiftType?.let { currentType ->
-            val index = shifts.indexOfFirst { it.equals(currentType, ignoreCase = true) }
-            if (index != -1) spinShift.setSelection(index)
-        }
-
-        spinRole.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, pos: Int, id: Long) {
-                if (roles[pos] == "Supervisor") {
-                    spinShift.visibility = View.GONE
-                } else {
-                    spinShift.visibility = View.VISIBLE
-                }
-            }
-            override fun onNothingSelected(p0: AdapterView<*>?) {}
-        }
+        val roleIndex = roles.indexOfFirst { it.equals(user.role, ignoreCase = true) }
+        if (roleIndex >= 0) spinRole.setSelection(roleIndex)
 
         AlertDialog.Builder(requireContext())
             .setTitle("Edit Pegawai")
             .setView(dialogView)
             .setNegativeButton("Batal", null)
             .setPositiveButton("Simpan") { _, _ ->
-                val employeeCode = edtEmployeeCode.text.toString().trim()
                 val name = edtName.text.toString().trim()
+                val email = edtEmail.text.toString().trim()
+                val employeeCode = edtEmployeeCode.text.toString().trim()
                 val role = spinRole.selectedItem.toString()
-                val shift = if (role == "Supervisor") "Shift Kantor" else spinShift.selectedItem.toString()
 
-                if (employeeCode.isEmpty() || name.isEmpty()) {
-                    Toast.makeText(context, "ID Pegawai dan Nama wajib diisi!", Toast.LENGTH_SHORT).show()
+                if (name.isEmpty() || email.isEmpty() || employeeCode.isEmpty()) {
+                    Toast.makeText(context, "Nama, email, dan ID Pegawai wajib diisi!", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
-                
+
                 if (employeeCode.length > 6) {
                     Toast.makeText(context, "ID Pegawai maksimal 6 angka!", Toast.LENGTH_SHORT).show()
                     return@setPositiveButton
                 }
 
-                updateEmployeeProfile(user.id, employeeCode, name, role, shift)
+                updateEmployeeProfile(user.id, employeeCode, name, role)
             }.show()
     }
 
-    private fun updateEmployeeProfile(userId: String, employeeCode: String, name: String, role: String, shift: String?) {
+    private fun updateEmployeeProfile(userId: String, employeeCode: String, name: String, role: String) {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
@@ -992,7 +1343,6 @@ class TabEmployeeCrudFragment : Fragment() {
                                 set("employee_code", employeeCode)
                                 set("name", name)
                                 set("role", role)
-                                set("shift_type", shift)
                                 set("position", role) // Sinkronkan posisi jabatan dengan role yang dipilih
                             }
                         ) {
@@ -1085,7 +1435,7 @@ class TabEmployeeCrudFragment : Fragment() {
             }
 
             holder.btnEdit.setOnClickListener { showEditEmployeeDialog(item) }
-            holder.btnResetPw.setOnClickListener { resetPasswordEmail(item.email) }
+            holder.btnResetPw.visibility = View.GONE
             holder.btnDeactivate.setOnClickListener { toggleEmployeeStatus(item) }
         }
 
@@ -1232,7 +1582,7 @@ class TabOffSchedulesFragment : Fragment() {
         loadingOverlay.visibility = View.VISIBLE
         lifecycleScope.launch {
             try {
-                // Validation: prevent double off scheduling on same date
+                // Validation: prevent duplicate off scheduling on same date
                 val duplicates = withContext(Dispatchers.IO) {
                     SupabaseClient.db.from("off_schedules")
                         .select {
@@ -1834,7 +2184,7 @@ class TabSalarySlipFragment : Fragment() {
                     document.add(Paragraph("SLIP GAJI RESMI").setBold().setFontSize(12f).setTextAlignment(TextAlignment.CENTER))
                     document.add(Paragraph("Periode: $selectedMonthYear\n").setFontSize(10f).setTextAlignment(TextAlignment.CENTER))
 
-                    document.add(Paragraph("Nama Karyawan: ${item.user.name}"))
+                    document.add(Paragraph("Nama Pegawai: ${item.user.name}"))
                     document.add(Paragraph("Kode Pegawai: ${item.user.employeeCode ?: "-"}"))
                     document.add(Paragraph("Posisi / Jabatan: ${item.user.position}"))
                     document.add(Paragraph("Departemen: Operations\n"))
@@ -2024,3 +2374,368 @@ class TabSettingsFragment : Fragment() {
 }
 
 class TabViolationsFragment : GenericTabFragment("Pelanggaran & Peringatan")
+class TabScheduleChangeFragment : Fragment() {
+    private lateinit var loadingOverlay: FrameLayout
+
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        val root = FrameLayout(requireContext())
+        val content = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(32, 32, 32, 32)
+        }
+        content.addView(TextView(requireContext()).apply {
+            text = "Tindakan untuk Pegawai"
+            textSize = 18f
+            setTextColor(android.graphics.Color.parseColor("#1F2937"))
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(0, 0, 0, 18)
+        })
+        listOf(
+            "Change Shift" to View.OnClickListener { showChangeShiftDialog() },
+            "Off Day" to View.OnClickListener { showOffDayDialog() },
+            "Lembur" to View.OnClickListener { startActivity(Intent(requireContext(), AssignLemburActivity::class.java)) },
+            "Ganti Off" to View.OnClickListener { showGantiOffDialog() },
+            "Cuti (Segera Hadir)" to View.OnClickListener { Toast.makeText(context, "Cuti segera hadir.", Toast.LENGTH_SHORT).show() }
+        ).forEach { (label, listener) ->
+            content.addView(MaterialButton(requireContext()).apply {
+                text = label
+                setOnClickListener(listener)
+                layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 18 }
+            })
+        }
+        loadingOverlay = FrameLayout(requireContext()).apply {
+            setBackgroundColor(android.graphics.Color.parseColor("#80FFFFFF"))
+            visibility = View.GONE
+            addView(ProgressBar(requireContext()), FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                android.view.Gravity.CENTER
+            ))
+        }
+        root.addView(content)
+        root.addView(loadingOverlay, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+        return root
+    }
+
+    private fun showChangeShiftDialog() {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val employees = fetchActiveEmployees()
+                val shifts = fetchActiveShifts()
+                loadingOverlay.visibility = View.GONE
+                if (employees.isEmpty() || shifts.isEmpty()) {
+                    Toast.makeText(context, "Data pegawai atau shift belum tersedia.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val form = createScheduleFormLayout()
+                val spinEmployee = Spinner(requireContext())
+                val spinShift = Spinner(requireContext())
+                val btnDate = Button(requireContext())
+                var selectedDate = todayIso()
+                addFormLabel(form, "Pegawai")
+                spinEmployee.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinEmployee)
+                addFormLabel(form, "Shift baru")
+                spinShift.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, shifts.map { it.name })
+                form.addView(spinShift)
+                addFormLabel(form, "Tanggal efektif")
+                btnDate.text = "Pilih Tanggal: $selectedDate"
+                btnDate.setOnClickListener { showDatePicker(selectedDate) { date -> selectedDate = date; btnDate.text = "Pilih Tanggal: $date" } }
+                form.addView(btnDate)
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Change Shift")
+                    .setView(form)
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Simpan") { _, _ ->
+                        val employee = employees.getOrNull(spinEmployee.selectedItemPosition)
+                        val shift = shifts.getOrNull(spinShift.selectedItemPosition)
+                        if (employee == null || shift == null) {
+                            Toast.makeText(context, "Pilih pegawai dan shift terlebih dahulu.", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        saveChangeShift(employee, shift, selectedDate)
+                    }
+                    .show()
+            } catch (e: Exception) {
+                loadingOverlay.visibility = View.GONE
+                Toast.makeText(context, "Gagal memuat form: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showOffDayDialog() {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val employees = fetchActiveEmployees()
+                loadingOverlay.visibility = View.GONE
+                if (employees.isEmpty()) {
+                    Toast.makeText(context, "Data pegawai belum tersedia.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val form = createScheduleFormLayout()
+                val spinEmployee = Spinner(requireContext())
+                val btnDate = Button(requireContext())
+                val edtReason = EditText(requireContext())
+                var selectedDate = todayIso()
+                addFormLabel(form, "Pegawai")
+                spinEmployee.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinEmployee)
+                addFormLabel(form, "Tanggal off")
+                btnDate.text = "Pilih Tanggal: $selectedDate"
+                btnDate.setOnClickListener { showDatePicker(selectedDate) { date -> selectedDate = date; btnDate.text = "Pilih Tanggal: $date" } }
+                form.addView(btnDate)
+                addFormLabel(form, "Alasan")
+                edtReason.setText("libur")
+                form.addView(edtReason)
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Off Day")
+                    .setView(form)
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Simpan") { _, _ ->
+                        val employee = employees.getOrNull(spinEmployee.selectedItemPosition)
+                        val reason = edtReason.text.toString().trim()
+                        if (employee == null || reason.isEmpty()) {
+                            Toast.makeText(context, "Pegawai dan alasan wajib diisi.", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        saveOffDay(employee, selectedDate, reason)
+                    }
+                    .show()
+            } catch (e: Exception) {
+                loadingOverlay.visibility = View.GONE
+                Toast.makeText(context, "Gagal memuat form: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private fun showGantiOffDialog() {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val employees = fetchActiveEmployees()
+                loadingOverlay.visibility = View.GONE
+                if (employees.size < 2) {
+                    Toast.makeText(context, "Minimal perlu dua pegawai untuk ganti off.", Toast.LENGTH_SHORT).show()
+                    return@launch
+                }
+                val form = createScheduleFormLayout()
+                val spinAssigned = Spinner(requireContext())
+                val spinReplacing = Spinner(requireContext())
+                val btnDate = Button(requireContext())
+                var selectedDate = todayIso()
+                addFormLabel(form, "Pegawai yang bertugas")
+                spinAssigned.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinAssigned)
+                addFormLabel(form, "Menggantikan pegawai")
+                spinReplacing.adapter = ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, employees.map { it.name })
+                form.addView(spinReplacing)
+                addFormLabel(form, "Tanggal ganti off")
+                btnDate.text = "Pilih Tanggal: $selectedDate"
+                btnDate.setOnClickListener { showDatePicker(selectedDate) { date -> selectedDate = date; btnDate.text = "Pilih Tanggal: $date" } }
+                form.addView(btnDate)
+                AlertDialog.Builder(requireContext())
+                    .setTitle("Ganti Off")
+                    .setView(form)
+                    .setNegativeButton("Batal", null)
+                    .setPositiveButton("Simpan") { _, _ ->
+                        val assigned = employees.getOrNull(spinAssigned.selectedItemPosition)
+                        val replacing = employees.getOrNull(spinReplacing.selectedItemPosition)
+                        if (assigned == null || replacing == null || assigned.id == replacing.id) {
+                            Toast.makeText(context, "Pilih dua pegawai yang berbeda.", Toast.LENGTH_SHORT).show()
+                            return@setPositiveButton
+                        }
+                        saveGantiOff(assigned, replacing, selectedDate)
+                    }
+                    .show()
+            } catch (e: Exception) {
+                loadingOverlay.visibility = View.GONE
+                Toast.makeText(context, "Gagal memuat form: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+            }
+        }
+    }
+
+    private suspend fun fetchActiveEmployees(): List<User> = withContext(Dispatchers.IO) {
+        SupabaseClient.db.from("users").select { filter { eq("is_active", true) } }.decodeList<User>()
+            .filter { !it.role.equals("superadmin", ignoreCase = true) }
+    }
+
+    private suspend fun fetchActiveShifts(): List<Shift> = withContext(Dispatchers.IO) {
+        SupabaseClient.db.from("shifts").select { filter { eq("is_active", true) } }.decodeList<Shift>()
+    }
+
+    private fun createScheduleFormLayout(): LinearLayout = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.VERTICAL
+        setPadding(24, 8, 24, 0)
+    }
+
+    private fun addFormLabel(parent: LinearLayout, text: String) {
+        parent.addView(TextView(requireContext()).apply { this.text = text; textSize = 14f; setPadding(0, 16, 0, 6) })
+    }
+
+    private fun todayIso(): String = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
+
+    private fun showDatePicker(currentDate: String, onPicked: (String) -> Unit) {
+        val cal = Calendar.getInstance()
+        try { SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).parse(currentDate)?.let { cal.time = it } } catch (_: Exception) { }
+        DatePickerDialog(requireContext(), { _, year, month, day ->
+            val picked = Calendar.getInstance().apply { set(year, month, day) }
+            onPicked(SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(picked.time))
+        }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
+    }
+
+    @Serializable
+    private data class UserShiftPayload(
+        @SerialName("user_id") val userId: String,
+        @SerialName("shift_id") val shiftId: String? = null,
+        @SerialName("shift_type") val shiftType: String? = null,
+        @SerialName("reason") val reason: String? = null,
+        @SerialName("effective_date") val effectiveDate: String
+    )
+
+    @Serializable
+    private data class NotificationPayload(
+        @SerialName("user_id") val userId: String,
+        @SerialName("message") val message: String,
+        @SerialName("is_read") val isRead: Boolean = false
+    )
+
+    private fun saveChangeShift(employee: User, shift: Shift, effectiveDate: String) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("user_shifts").insert(UserShiftPayload(employee.id, shift.id, effectiveDate = effectiveDate))
+                    SupabaseClient.db.from("notifications").insert(NotificationPayload(employee.id, "Admin mengubah jadwal shift kerja kamu, silahkan absen sesuai jam yang ditentukan."))
+                }
+                Toast.makeText(context, "Shift pegawai berhasil diperbarui!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal memperbarui shift: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun saveOffDay(employee: User, date: String, reason: String) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("user_shifts").insert(UserShiftPayload(employee.id, null, "off", reason, date))
+                    SupabaseClient.db.from("attendance").update({ set("status", "off") }) { filter { eq("user_id", employee.id); eq("date", date) } }
+                    SupabaseClient.db.from("notifications").insert(NotificationPayload(employee.id, "Jadwal kamu diperbarui menjadi Off pada tanggal $date."))
+                }
+                Toast.makeText(context, "Hari off berhasil diset!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal menyimpan off day: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
+
+    private fun saveGantiOff(assigned: User, replacing: User, date: String) {
+        loadingOverlay.visibility = View.VISIBLE
+        lifecycleScope.launch {
+            try {
+                val currentAdminId = SupabaseClient.auth.currentSessionOrNull()?.user?.id
+                withContext(Dispatchers.IO) {
+                    SupabaseClient.db.from("emergency_assignments").insert(EmergencyAssignment(
+                        assignedUserId = assigned.id,
+                        targetDate = date,
+                        reason = "ganti_off",
+                        replacingUserId = replacing.id,
+                        assignedBy = currentAdminId,
+                        assignedFrom = "android",
+                        status = "pending"
+                    ))
+                    SupabaseClient.db.from("off_schedules").insert(OffSchedule(userId = replacing.id, date = date, reason = "Ganti off dengan ${assigned.name}"))
+                }
+                Toast.makeText(context, "Ganti off berhasil disimpan!", Toast.LENGTH_SHORT).show()
+            } catch (e: Exception) {
+                Toast.makeText(context, "Gagal menyimpan ganti off: ${e.localizedMessage}", Toast.LENGTH_LONG).show()
+            } finally {
+                loadingOverlay.visibility = View.GONE
+            }
+        }
+    }
+}
+
+class TabScheduleHistoryFragment : Fragment() {
+    override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
+        val root = FrameLayout(requireContext())
+        val scroll = ScrollView(requireContext())
+        val content = LinearLayout(requireContext()).apply { orientation = LinearLayout.VERTICAL; setPadding(24, 24, 24, 24) }
+        val loading = ProgressBar(requireContext())
+        scroll.addView(content)
+        root.addView(scroll)
+        root.addView(loading, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, android.view.Gravity.CENTER))
+        lifecycleScope.launch {
+            try {
+                val rows = loadScheduleHistoryRows()
+                content.removeAllViews()
+                if (rows.isEmpty()) {
+                    content.addView(TextView(requireContext()).apply { text = "Belum ada riwayat perubahan jadwal."; textSize = 16f })
+                } else {
+                    rows.forEach { content.addView(createHistoryItem(it)) }
+                }
+            } catch (e: Exception) {
+                content.removeAllViews()
+                content.addView(TextView(requireContext()).apply { text = "Gagal memuat riwayat: ${e.localizedMessage}"; textSize = 14f })
+            } finally {
+                loading.visibility = View.GONE
+            }
+        }
+        return root
+    }
+
+    private suspend fun loadScheduleHistoryRows(): List<String> = withContext(Dispatchers.IO) {
+        val users = SupabaseClient.db.from("users").select().decodeList<User>().associateBy { it.id }
+        val shifts = SupabaseClient.db.from("shifts").select().decodeList<Shift>().associateBy { it.id }
+        val result = mutableListOf<String>()
+        SupabaseClient.db.from("user_shifts").select().decodeList<Map<String, kotlinx.serialization.json.JsonElement>>().forEach { row ->
+            val userId = cleanJson(row["user_id"])
+            val date = cleanJson(row["effective_date"]) ?: "-"
+            val type = cleanJson(row["shift_type"])
+            val reason = cleanJson(row["reason"])
+            val shiftId = cleanJson(row["shift_id"])
+            val name = users[userId]?.name ?: "Pegawai"
+            val title = if (type == "off") "Off Day" else "Change Shift"
+            val detail = if (type == "off") reason ?: "libur" else shifts[shiftId]?.name ?: "-"
+            result.add("$date\n$title - $name\n$detail")
+        }
+        SupabaseClient.db.from("emergency_assignments").select().decodeList<EmergencyAssignment>().forEach { item ->
+            val assigned = users[item.assignedUserId]?.name ?: "Pegawai"
+            val replacing = item.replacingUserId?.let { users[it]?.name } ?: "-"
+            val title = if (item.reason == "ganti_off") "Ganti Off" else "Lembur"
+            val detail = if (item.reason == "ganti_off") "Ganti off dengan $replacing" else "Lembur"
+            result.add("${item.targetDate}\n$title - $assigned\n$detail")
+        }
+        SupabaseClient.db.from("overtime_assignments").select().decodeList<OvertimeAssignment>().forEach { item ->
+            val user = users[item.userId]?.name ?: "Pegawai"
+            val shift = shifts[item.shiftId]?.name ?: "-"
+            result.add("${item.assignmentDate}\nLembur - $user\n$shift")
+        }
+        result.sortedDescending()
+    }
+
+    private fun cleanJson(value: kotlinx.serialization.json.JsonElement?): String? {
+        val raw = value?.toString()?.trim('"') ?: return null
+        return if (raw == "null") null else raw
+    }
+
+    private fun createHistoryItem(textValue: String): View = TextView(requireContext()).apply {
+        text = textValue
+        textSize = 14f
+        setTextColor(android.graphics.Color.parseColor("#1F2937"))
+        setPadding(24, 18, 24, 18)
+        background = android.graphics.drawable.GradientDrawable().apply {
+            setColor(android.graphics.Color.WHITE)
+            setStroke(1, android.graphics.Color.parseColor("#E5E7EB"))
+            cornerRadius = 14f
+        }
+        layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).apply { bottomMargin = 14 }
+    }
+}
