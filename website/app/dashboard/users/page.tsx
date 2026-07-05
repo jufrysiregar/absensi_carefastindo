@@ -3140,16 +3140,33 @@ export default function ManagementEmployeePage() {
                       .eq('id', editingAtt.user_id)
                   }
 
-                  // 1. Update attendance table
-                  const { error } = await supabase.from('attendance').update({
-                    check_in_time: toTsSameDay(editingAtt.date, editAttForm.check_in),
-                    check_out_time: toTs(editingAtt.date, editAttForm.check_out),
-                    break_start: toTs(editingAtt.date, editAttForm.break_start),
-                    break_end: toTs(editingAtt.date, editAttForm.break_end),
-                    status: finalStatus,
-                    note: editAttForm.notes || null,
-                  }).eq('id', editingAtt.id)
-                  if (error) throw error
+                  // 1. Update atau INSERT attendance tergantung apakah sudah ada record
+                  const isVirtual = editingAtt.id.startsWith('virtual_')
+                  if (isVirtual) {
+                    // Belum ada record → INSERT baru
+                    const { error } = await supabase.from('attendance').insert({
+                      user_id: editingAtt.user_id,
+                      date: editingAtt.date,
+                      check_in_time: toTsSameDay(editingAtt.date, editAttForm.check_in),
+                      check_out_time: toTs(editingAtt.date, editAttForm.check_out),
+                      break_start: toTs(editingAtt.date, editAttForm.break_start),
+                      break_end: toTs(editingAtt.date, editAttForm.break_end),
+                      status: finalStatus,
+                      note: editAttForm.notes || null,
+                    })
+                    if (error) throw error
+                  } else {
+                    // Sudah ada record → UPDATE
+                    const { error } = await supabase.from('attendance').update({
+                      check_in_time: toTsSameDay(editingAtt.date, editAttForm.check_in),
+                      check_out_time: toTs(editingAtt.date, editAttForm.check_out),
+                      break_start: toTs(editingAtt.date, editAttForm.break_start),
+                      break_end: toTs(editingAtt.date, editAttForm.break_end),
+                      status: finalStatus,
+                      note: editAttForm.notes || null,
+                    }).eq('id', editingAtt.id)
+                    if (error) throw error
+                  }
 
                   // 1b. Jika shift_id diisi, update user_shifts
                   if (editAttForm.shift_id) {
