@@ -853,20 +853,8 @@ export default function ManagementEmployeePage() {
         })
       }
 
-      // 3. Update shift karyawan via user_shifts
-      // Gunakan shift_type 'profile_edit' agar tidak muncul di Daftar Riwayat Aktivitas
-      if (editForm.shiftId !== editingUser.shift_id) {
-        const newShiftId = editForm.shiftId === 'none' || !editForm.shiftId ? null : editForm.shiftId
-        const { error: shiftError } = await supabase
-          .from('user_shifts')
-          .insert({
-            user_id: editingUser.id,
-            shift_id: newShiftId,
-            effective_date: new Date().toISOString().split('T')[0],
-            shift_type: 'profile_edit',
-          })
-        if (shiftError) throw shiftError
-      }
+      // Shift tidak diupdate dari sini — perubahan shift hanya melalui
+      // button "Ubah Jadwal Karyawan" atau edit di "Tabel Absensi Karyawan"
 
       toast.success('Data karyawan berhasil diperbarui!')
       setEditingUser(null)
@@ -2902,21 +2890,6 @@ export default function ManagementEmployeePage() {
                     <option value="housekeeping">Housekeeping</option>
                     <option value="gardener">Gardener</option>
                     <option value="gondola">Gondola</option>
-                  </select>
-                </div>
-
-                <div className="flex flex-col">
-                  <label className="text-sm font-medium text-slate-600 mb-1">Shift</label>
-                  <select
-                    value={editForm.shiftId}
-                    onChange={e => setEditForm(f => ({ ...f, shiftId: e.target.value }))}
-                    className="w-full h-10 px-3 py-2 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  >
-                    <option value="">Pilih Shift (Opsional)</option>
-                    {shifts.map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
-                    ))}
-                    <option value="none">Tanpa Shift</option>
                   </select>
                 </div>
 
