@@ -550,17 +550,23 @@ export default function ManagementEmployeePage() {
       const attMap: Record<string, any> = {}
       ;(attData ?? []).forEach((r: any) => { attMap[r.user_id] = r })
 
-      // 3. Fetch user_shifts untuk tanggal ini (off/izin/sakit yang di-set admin)
+      // 3. Fetch user_shifts untuk tanggal ini — ambil semua row s/d targetDate
+      // Logika: shift berlaku 1 bulan. Untuk tiap user, pakai shift terakhir
+      // dengan effective_date <= targetDate (bukan exact match)
       const { data: userShiftsData } = await supabase
         .from('user_shifts')
-        .select('user_id, shift_type, shifts(id, name)')
-        .eq('effective_date', targetDate)
+        .select('user_id, shift_type, effective_date, shifts(id, name)')
+        .lte('effective_date', targetDate)
+        .order('effective_date', { ascending: false })
 
+      // Untuk tiap user, ambil row pertama (effective_date terbaru <= targetDate)
       const userShiftMap: Record<string, { shift_name: string; shift_type: string | null }> = {}
       ;(userShiftsData ?? []).forEach((us: any) => {
-        userShiftMap[us.user_id] = {
-          shift_name: (us.shifts as any)?.name ?? '—',
-          shift_type: us.shift_type ?? null,
+        if (!userShiftMap[us.user_id]) {
+          userShiftMap[us.user_id] = {
+            shift_name: (us.shifts as any)?.name ?? '—',
+            shift_type: us.shift_type ?? null,
+          }
         }
       })
 
@@ -575,31 +581,22 @@ export default function ManagementEmployeePage() {
       )
 
       // 4. Fetch shift aktif per user (shift default mereka) — exclude off dan profile_edit
+      // PENTING: neq tidak return NULL rows di Supabase, jadi ambil semua lalu filter di client
       const { data: defaultShifts } = await supabase
         .from('user_shifts')
         .select('user_id, created_at, shift_type, shifts(name)')
         .not('shift_id', 'is', null)
-        .neq('shift_type', 'off')
-        .neq('shift_type', 'profile_edit')
-        .order('created_at', { ascending: false })
-
-      // Fetch profile_edit shifts secara terpisah (ini shift aktif user dari edit profil)
-      const { data: profileEditShifts } = await supabase
-        .from('user_shifts')
-        .select('user_id, created_at, shift_type, shifts(name)')
-        .not('shift_id', 'is', null)
-        .eq('shift_type', 'profile_edit')
         .order('created_at', { ascending: false })
 
       const defaultShiftMap: Record<string, string> = {}
-      // Gabungkan keduanya, ambil yang terbaru per user
-      const allDefaultShifts = [...(defaultShifts ?? []), ...(profileEditShifts ?? [])]
-        .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-      allDefaultShifts.forEach((us: any) => {
-        if (!defaultShiftMap[us.user_id]) {
-          defaultShiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
-        }
-      })
+      // Ambil row terbaru per user, exclude off dan profile_edit
+      ;(defaultShifts ?? [])
+        .filter((us: any) => us.shift_type !== 'off' && us.shift_type !== 'profile_edit')
+        .forEach((us: any) => {
+          if (!defaultShiftMap[us.user_id]) {
+            defaultShiftMap[us.user_id] = (us.shifts as any)?.name ?? '—'
+          }
+        })
 
       // 5. Fetch overtime untuk tanggal ini
       const { data: otData } = await supabase
